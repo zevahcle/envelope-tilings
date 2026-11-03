@@ -86,3 +86,46 @@ describe('non-Coxeter tiles', () => {
     expect(ok.flattens).toBe(true);
   });
 });
+
+import { findConwayDecomposition, conwayTiling } from '../src/envelope/conway';
+import { tileNetGeneral } from '../src/envelope/tiling';
+
+describe('Conway criterion on envelope nets', () => {
+  for (const tid of ['rectangle', 'square']) {
+    for (const p of PRESETS) {
+      it(`${tid} / ${p.id} satisfies the Conway criterion (Akiyama–Matsunaga)`, () => {
+        const base = tileById(tid).build(defaultParams(tileById(tid)));
+        const { cuts, hinges } = p.make(base);
+        const u = computeUnfolding(base, cuts, hinges);
+        const dec = findConwayDecomposition(u.outline!);
+        expect(dec).not.toBeNull();
+        expect(conwayTiling(u.outline!, dec!).tiles).toBe(true);
+      });
+    }
+  }
+  it('parallelogram with a side-to-side cut tiles by translations', () => {
+    const par = tileById('parallelogram').build({});
+    const { cuts } = preset('wave').make(par);
+    const u = computeUnfolding(par, cuts, []);
+    expect(u.flattens).toBe(true);
+    const t = tileNetGeneral(par, u.outline!);
+    expect(t.method).toBe('conway');
+    expect(t.tiles).toBe(true);
+  });
+  it('hexagon domino tiles; a freehand asymmetric net may not', () => {
+    const hex = tileById('hexagon').build({});
+    const t = tileNetGeneral(hex, computeUnfolding(hex, [], []).outline!);
+    expect(t.method).toBe('conway');
+    expect(t.tiles).toBe(true);
+  });
+  it('every preset stays inside every tile', () => {
+    for (const tile of TILES) {
+      const base = tile.build(defaultParams(tile));
+      for (const p of PRESETS) {
+        const { cuts } = p.make(base);
+        const u = computeUnfolding(base, cuts, []);
+        expect(u.problems.filter((x) => x.includes('tree'))).toEqual([]);
+      }
+    }
+  });
+});

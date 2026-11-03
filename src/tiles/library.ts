@@ -1,4 +1,5 @@
 import { type Polygon, regularPolygon } from '../geom/polygon';
+import { hat14 } from './hat';
 
 export type TileFamily = 'coxeter' | 'lattice' | 'aperiodic';
 
@@ -87,6 +88,14 @@ export const TILES: TileDef[] = [
     isCoxeter: false,
     note: 'Not a tile-maker: cone angles 240°. Some unfoldings tile, most do not.',
     build: () => regularPolygon(6, 0.9, 0),
+  },
+  {
+    id: 'hat',
+    name: 'The hat (aperiodic)',
+    family: 'aperiodic',
+    isCoxeter: false,
+    note: 'Not a tile-maker: most cuts do not flatten, and even flat nets never tile (reflected hats would be half of all hats).',
+    build: () => hat14().map((p) => ({ x: p.x * 0.5, y: p.y * 0.5 })),
   },
   {
     id: 'parallelogram',

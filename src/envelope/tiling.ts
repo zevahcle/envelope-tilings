@@ -15,6 +15,8 @@ export interface NetTiling {
   copies: PlacedCopy[];
   tiles: boolean;
   truncated: boolean;
+  /** how the copies were produced */
+  method: 'development' | 'conway' | 'ring';
 }
 
 /**
@@ -38,5 +40,22 @@ export function tileNet(base: Polygon, outline: Polygon, radiusFactor = 3, maxCo
         copies[j]!.overlapping = true;
       }
     }
-  return { copies, tiles: copies.every((k) => !k.overlapping), truncated: group.truncated };
+  return { copies, tiles: copies.every((k) => !k.overlapping), truncated: group.truncated, method: radiusFactor < 2 ? 'ring' : 'development' };
+}
+
+import { findConwayDecomposition, conwayTiling } from './conway';
+
+/**
+ * For tiles that are not tile-makers: look for a Conway (p2) decomposition of
+ * the net and tile with it; otherwise show the first ring of the development
+ * so that the overlap is visible.
+ */
+export function tileNetGeneral(base: Polygon, outline: Polygon): NetTiling {
+  const dec = findConwayDecomposition(outline);
+  if (dec) {
+    const r = conwayTiling(outline, dec);
+    if (r.tiles) return { copies: r.copies, tiles: true, truncated: false, method: 'conway' };
+  }
+  const ring = tileNet(base, outline, 1.2, 40);
+  return { ...ring, tiles: false, method: 'ring' };
 }

@@ -1,4 +1,5 @@
 import { type Cut, type HingeSpec } from '../envelope/model';
+import { type SeamCurves } from '../seam/deform';
 
 export type Tool = 'draw' | 'hinge' | 'erase' | 'pan';
 
@@ -12,15 +13,27 @@ export interface AppState {
   open: number;
   tool: Tool;
   message: string;
+  /* seam mode */
+  seamTileId: string;
+  seamParams: Record<string, number>;
+  seamLevel: number;
+  curves: SeamCurves;
+  /** class representative selected for presets */
+  selectedClass: number | null;
 }
 
-type Snapshot = Pick<AppState, 'tileId' | 'params' | 'cuts' | 'hinges'>;
+export type Snapshot = Pick<AppState, 'tileId' | 'params' | 'cuts' | 'hinges' | 'seamTileId' | 'seamParams' | 'seamLevel' | 'curves' | 'mode'>;
 
-const snapshot = (s: AppState): Snapshot => ({
+export const snapshot = (s: AppState): Snapshot => ({
+  mode: s.mode,
   tileId: s.tileId,
   params: { ...s.params },
   cuts: s.cuts.map((c) => ({ id: c.id, pts: c.pts.slice() })),
   hinges: s.hinges.slice(),
+  seamTileId: s.seamTileId,
+  seamParams: { ...s.seamParams },
+  seamLevel: s.seamLevel,
+  curves: Object.fromEntries(Object.entries(s.curves).map(([k, v]) => [k, v.slice()])),
 });
 
 export class Store {
