@@ -39,6 +39,7 @@ export function mountApp(root: HTMLElement): void {
     cuts: [],
     hinges: [],
     open: 0,
+    netOnly: false,
     tool: 'draw',
     message: 'Draw a cut on the front sheet of the envelope.',
     seamTileId: seamFirst.id,
@@ -90,6 +91,8 @@ export function mountApp(root: HTMLElement): void {
   clearBtn.onclick = () => store.commit({ cuts: [], hinges: [] }, 'cleared');
   const openSlider = h('input', { type: 'range', min: '0', max: '1', step: '0.005', value: '0', class: 'slider', 'aria-label': 'Open the envelope' });
   const playBtn = h('button', { class: 'btn' }, ['▶ Unfold']);
+  const netOnlyBox = h('input', { type: 'checkbox', 'aria-label': 'Show the net only' });
+  const netOnlyField = h('label', { class: 'field check' }, [netOnlyBox, ' Net only (hide the envelope)']);
   const envelopeSidebar = h('div', { class: 'stack' }, [
     h('h2', {}, ['Tools']),
     h('div', { class: 'stack' }, Object.values(toolButtons)),
@@ -98,6 +101,7 @@ export function mountApp(root: HTMLElement): void {
     clearBtn,
     h('h2', {}, ['Unfold']),
     h('div', { class: 'row' }, [openSlider, playBtn]),
+    netOnlyField,
     h('h2', {}, ['How it works']),
     h('div', { class: 'explain' }, [
       h('p', {}, ['1. The envelope is a doubly covered polygon: two sheets glued along the border.']),
@@ -305,10 +309,11 @@ export function mountApp(root: HTMLElement): void {
       editorTitle.textContent = 'Envelope';
       for (const [name, b] of Object.entries(toolButtons)) b.classList.toggle('active', name === s.tool);
       if (Number(openSlider.value) !== s.open) openSlider.value = String(s.open);
+      netOnlyBox.checked = s.netOnly;
       const { base, u, t } = deriveEnvelope(s);
       previewTitle.textContent = t && !t.tiles ? 'Development of the net (overlaps in red)' : 'Tiling by the net';
       const tileKey = s.tileId + JSON.stringify(s.params);
-      editor.render(base, u, s.open, tileKey);
+      editor.render(base, u, s.open, tileKey, s.netOnly);
       preview.render(t, base, tileKey);
       const tile = tileById(s.tileId);
       const parts = [
@@ -402,6 +407,10 @@ export function mountApp(root: HTMLElement): void {
   exportEditor.onclick = () => download(store.get().mode === 'envelope' ? 'envelope-net.svg' : 'seam-tile.svg', (store.get().mode === 'envelope' ? editor : seamEditor).canvas.serialize());
   exportPreview.onclick = () => download(store.get().mode === 'envelope' ? 'envelope-tiling.svg' : 'seam-tiling.svg', (store.get().mode === 'envelope' ? preview : seamPreview).canvas.serialize());
   openSlider.oninput = () => store.set({ open: Number(openSlider.value) });
+  netOnlyBox.onchange = () => {
+    store.set({ netOnly: netOnlyBox.checked });
+    if (netOnlyBox.checked && store.get().open < 1) animateTo(1);
+  };
 
   let anim: number | null = null;
   function animateTo(target: number): void {

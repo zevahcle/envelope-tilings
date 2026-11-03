@@ -39,6 +39,8 @@ Run: `npm run dev` → http://localhost:5173/. Tests: `npm test` (57 passing).
   panes, keyboard shortcuts, light/dark theme, responsive layout.
 - Screenshot helper: `node scripts/shot.mjs <url> <out.png>`.
 
+- Envelope mode: "Net only" checkbox draws the unfolded net as a single filled shape (no envelope border, hinges or cut lines on top); SVG tile export follows the view.
+
 ## Not yet done
 - Explain stepper / guided tour; gallery of paper figures as preset links.
 - Conway decomposition drawn on the net (break points, half-turn centres).

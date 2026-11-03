@@ -39,7 +39,7 @@ export class EnvelopeEditor {
     svg.addEventListener('pointerleave', () => this.canvas.clear('hover'));
   }
 
-  render(base: Polygon, u: Unfolding, open: number, tileKey: string): void {
+  render(base: Polygon, u: Unfolding, open: number, tileKey: string, netOnly = false): void {
     this.base = base;
     this.current = u;
     const c = this.canvas;
@@ -48,20 +48,37 @@ export class EnvelopeEditor {
       c.fit(bounds(all), 60);
       this.fittedFor = tileKey;
     }
+    const flat = open > 0.999;
+    // Net-only view: once fully open, the net is one tile (back sheet + mirrored flaps) drawn as a
+    // single filled shape with its outline; no envelope border, hinges or cut lines on top of it.
+    const clean = netOnly && flat && !!u.outline;
     const back = c.clear('back');
-    back.appendChild(
-      svgEl('path', { d: pathOf(base), fill: 'var(--paper-back)', stroke: 'var(--ink)', 'stroke-width': c.px(1.5), 'stroke-linejoin': 'round' }),
-    );
+    if (clean) {
+      back.appendChild(
+        svgEl('path', { d: pathOf(u.outline!), fill: 'var(--paper-front)', stroke: 'var(--ink)', 'stroke-width': c.px(1.8), 'stroke-linejoin': 'round' }),
+      );
+    } else {
+      back.appendChild(
+        svgEl('path', {
+          d: pathOf(base),
+          fill: netOnly ? 'var(--paper-front)' : 'var(--paper-back)',
+          stroke: netOnly ? 'none' : 'var(--ink)',
+          'stroke-width': c.px(1.5),
+          'stroke-linejoin': 'round',
+        }),
+      );
+    }
     const flaps = c.clear('flaps');
     for (const f of u.flaps) {
+      if (clean && !f.conflict) continue;
       const g = svgEl('g', { transform: matrixAttr(foldMatrix(f.hinge.a, f.hinge.b, open)) });
       const shade = Math.abs(Math.cos(Math.PI * open));
       g.appendChild(
         svgEl('path', {
           d: pathOf(f.piece.poly),
           fill: f.conflict ? 'var(--bad-fill)' : 'var(--paper-front)',
-          'fill-opacity': 0.55 + 0.45 * shade,
-          stroke: f.conflict ? 'var(--bad)' : 'var(--ink)',
+          'fill-opacity': netOnly ? 1 : 0.55 + 0.45 * shade,
+          stroke: f.conflict ? 'var(--bad)' : clean ? 'none' : 'var(--ink)',
           'stroke-width': 1.5,
           'stroke-linejoin': 'round',
           'vector-effect': 'non-scaling-stroke',
@@ -74,21 +91,23 @@ export class EnvelopeEditor {
       flaps.appendChild(svgEl('path', { d: pathOf(p.poly), fill: 'var(--bad-fill)', stroke: 'var(--bad)', 'stroke-width': c.px(1.5) }));
     }
     const hinges = c.clear('hinges');
-    for (const f of u.flaps) {
-      hinges.appendChild(
-        svgEl('path', {
-          d: pathOf([f.hinge.a, f.hinge.b], false),
-          stroke: 'var(--accent)',
-          'stroke-width': c.px(5),
-          'stroke-linecap': 'round',
-          'stroke-dasharray': `${c.px(8)} ${c.px(6)}`,
-          fill: 'none',
-          opacity: 0.9,
-        }),
-      );
+    if (!clean) {
+      for (const f of u.flaps) {
+        hinges.appendChild(
+          svgEl('path', {
+            d: pathOf([f.hinge.a, f.hinge.b], false),
+            stroke: 'var(--accent)',
+            'stroke-width': c.px(5),
+            'stroke-linecap': 'round',
+            'stroke-dasharray': `${c.px(8)} ${c.px(6)}`,
+            fill: 'none',
+            opacity: 0.9,
+          }),
+        );
+      }
     }
     const outline = c.clear('outline');
-    if (u.outline && open > 0.999) {
+    if (u.outline && flat && !clean) {
       outline.appendChild(
         svgEl('path', { d: pathOf(u.outline), fill: 'none', stroke: 'var(--accent-2)', 'stroke-width': c.px(2.5), 'stroke-linejoin': 'round' }),
       );

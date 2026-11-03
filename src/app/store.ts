@@ -11,6 +11,8 @@ export interface AppState {
   hinges: HingeSpec[];
   /** 0 = closed envelope, 1 = fully open */
   open: number;
+  /** draw only the unfolded net, without the envelope underneath */
+  netOnly: boolean;
   tool: Tool;
   message: string;
   /* seam mode */
