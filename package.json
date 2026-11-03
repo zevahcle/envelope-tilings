@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "build:single": "SINGLE=1 vite build"
+    "build:single": "SINGLE=1 vite build",
+    "standalone": "SINGLE=1 vite build && cp dist-single/index.html standalone/envelope-tilings.html"
   },
   "devDependencies": {
     "playwright-core": "^1.64.1",
