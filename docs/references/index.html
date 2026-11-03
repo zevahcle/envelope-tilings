@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Envelope Tilings: notes and references</title>
+<style>
+  @page { size: A4; }
+  html { font-size: 10.5pt; }
+  body { font-family: Georgia, "Times New Roman", serif; color: #1b1a17; line-height: 1.42; max-width: 100%; margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 2pt; font-weight: 600; letter-spacing: -0.01em; }
+  .sub { color: #5a564e; margin: 0 0 14pt; font-size: 10pt; }
+  h2 { font-size: 12.5pt; margin: 16pt 0 5pt; font-weight: 600; border-bottom: 0.6pt solid #c9c3b6; padding-bottom: 2pt; }
+  p { margin: 0 0 6pt; text-align: justify; hyphens: auto; }
+  ol.refs { padding-left: 0; list-style: none; counter-reset: ref; margin: 0; }
+  ol.refs li { counter-increment: ref; position: relative; padding-left: 22pt; margin: 0 0 6.5pt; text-align: justify; hyphens: auto; page-break-inside: avoid; }
+  ol.refs li::before { content: "[" counter(ref) "]"; position: absolute; left: 0; color: #5a564e; font-variant-numeric: tabular-nums; }
+  .t { font-style: italic; }
+  .note { display: block; color: #3d3a34; font-size: 9.6pt; margin-top: 1.5pt; }
+  a { color: #1a4f8a; text-decoration: none; word-break: break-all; }
+  code { font-family: Menlo, Consolas, monospace; font-size: 9pt; }
+  .box { border: 0.6pt solid #c9c3b6; background: #f6f3ec; padding: 7pt 10pt; margin: 8pt 0 10pt; border-radius: 3pt; }
+  .box p { margin: 0 0 4pt; }
+  .box p:last-child { margin: 0; }
+  dl { margin: 0; } dt { font-weight: 600; margin-top: 4pt; } dd { margin: 0 0 2pt 0; }
+  .foot { margin-top: 14pt; font-size: 9pt; color: #5a564e; border-top: 0.6pt solid #c9c3b6; padding-top: 5pt; }
+</style>
+</head>
+<body>
+<h1>Envelope Tilings: notes and references</h1>
+<p class="sub">Companion notes for the editor at <a href="https://zevahcle.github.io/envelope-tilings/">zevahcle.github.io/envelope-tilings</a> · source and standalone file at <a href="https://github.com/zevahcle/envelope-tilings">github.com/zevahcle/envelope-tilings</a> · 3 November 2026</p>
+
+<h2>1. What the editor shows</h2>
+<p><b>Envelope mode.</b> Take a polygon and glue two copies of it along the boundary: a “pillowcase” or <em>dihedron</em>. Cut the front sheet along any curves, keep each flap attached to the back sheet along one straight segment of the boundary (its hinge), and open the flaps flat. Opening a flap reflects it across its hinge, so the result is a planar region (the <em>net</em>) of twice the original area. For a <b>rectangle</b>, and for the three triangles with angles <b>45°–45°–90°</b>, <b>30°–60°–90°</b> and <b>60°–60°–60°</b>, <em>every</em> such net tiles the plane. This is Akiyama’s <em>tile-maker theorem</em> [1, 4, 5]; for the rectangle, Akiyama and Matsunaga proved the stronger statement that every net satisfies the Conway criterion and therefore tiles by translations and half-turns [2, 3]. Langerman and Winslow [6] gave the reason in one line: a closed surface is a tile-maker exactly when every one of its cone points has angle 360°/<i>m</i> for an integer <i>m</i>, and these four dihedra are the only convex ones.</p>
+<p>The editor shows this directly, and it also shows the two ways the construction fails for other polygons. First, a flap can fail to <em>flatten</em>: for a non-convex polygon such as the hat, the reflected flap may land on the back sheet (drawn in red). Second, a net may flatten and still not tile. For non-tile-makers the editor searches for a Conway decomposition of the net and tiles with it when one exists (the parallelogram with a side-to-side cut, or the regular hexagon with no cut), and otherwise reports that no such tiling was found.</p>
+<p><b>Seam mode.</b> The same idea, read differently: an envelope cut is a curve drawn on a pair of matched edges of a tiling, and it keeps the tiling as long as the two edges it replaces still fit together. For a general tiling by one tile, every edge of the tile meets some edge of a neighbour either directly, by a half-turn about the contact midpoint, or through a reflection. Following these contacts groups the edges of the tile into classes; one drawn curve determines the curve on every edge of its class, and a cycle of contacts can force the curve to be centrally symmetric, mirror symmetric, or straight. For lattice tiles this is the classical Escher-style edge modification [13, 14, 15]. For the <b>Spectre</b> all fourteen edges form a single free class whose curves alternate in orientation, exactly the construction in the chiral monotile paper [8, Lemma 2.1]. For the <b>hat</b> and the whole family Tile(<i>a</i>,<i>b</i>) [7] every class contains a mirrored contact, so every edge is forced straight: the hat admits no edge-curving at all, and the only freedom is the two side lengths <i>a</i>, <i>b</i>.</p>
+
+<h2>2. What is known and what is new</h2>
+<div class="box">
+<p>The envelope observation, its classification, the Conway-tile description of the nets, and the generalisation to flat closed surfaces are all published by Akiyama and his coauthors [1–6]. Replacing the edges of the Spectre by curves is part of the original construction [8], and the hat’s authors describe such changes as “trivial modifications of tiling edges”; the dynamical-systems literature treats them as a change that preserves mutual local derivability [9, 10, 11].</p>
+<p>What we have not found in print is the edge-by-edge contact analysis for the hat and its family (the classes of its fourteen edges and the rigidity that follows), the hat as an explicit example of why the tile-maker hypothesis is needed, the reformulation of the envelope cut as a seam deformation, and an interactive editor doing all of this. The rigidity statement is checked by computer on substitution patches of the hat, turtle and Spectre; the code and tests are in the repository.</p>
+</div>
+
+<h2 style="page-break-before: always; margin-top: 0">3. References</h2>
+<p>Bibliographic data were checked on 3 November 2026 against Crossref and the publishers’ pages; every DOI below resolves.</p>
+
+<ol class="refs">
+<li>J. Akiyama, <span class="t">Tile-makers and semi-tile-makers</span>, American Mathematical Monthly 114 (7) (2007) 602–609. <a href="https://doi.org/10.1080/00029890.2007.11920450">doi:10.1080/00029890.2007.11920450</a>
+<span class="note">Defines tile-makers (polyhedra and dihedra all of whose nets tile) and classifies the convex ones: isosceles tetrahedra and the doubly covered rectangle, equilateral, isosceles right and 30°–60°–90° triangles.</span></li>
+
+<li>J. Akiyama, K. Matsunaga, <span class="t">Unfoldings of an envelope</span>, European Journal of Combinatorics 80 (2019) 3–16. <a href="https://doi.org/10.1016/j.ejc.2018.02.023">doi:10.1016/j.ejc.2018.02.023</a>
+<span class="note">Cutting a doubly covered rectangle along any spanning tree of its corners gives a Conway tile; two unfoldings along non-crossing trees are hinged dissections of each other; conditions for a Conway tile to fold back into an envelope.</span></li>
+
+<li>J. Akiyama, K. Matsunaga, <span class="t">An algorithm for folding a Conway tile into an isotetrahedron or a rectangle dihedron</span>, Journal of Information Processing 28 (2020) 750–758. <a href="https://doi.org/10.2197/ipsjjip.28.750">doi:10.2197/ipsjjip.28.750</a>
+<span class="note">The converse direction: every Conway tile folds into an isotetrahedron or a rectangle dihedron, with an algorithm.</span></li>
+
+<li>J. Akiyama, K. Matsunaga, <span class="t">Treks into Intuitive Geometry: The World of Polygons and Polyhedra</span>, 2nd ed., Springer Nature Singapore, 2024. <a href="https://doi.org/10.1007/978-981-99-8608-8">doi:10.1007/978-981-99-8608-8</a> (1st ed., Springer Japan, 2015, <a href="https://doi.org/10.1007/978-4-431-55843-9">doi:10.1007/978-4-431-55843-9</a>)
+<span class="note">The book in which the pillowcase appears. Chapter 2, “The tile-maker theorem and its applications to art and designs” (2nd ed. pp. 35–88), proves the dihedral tile-maker theorem and extends it to flat closed surfaces; Chapter 5, “Reversible pairs of figures” (pp. 177–264), contains “Envelope magic” and its trapezoidal and generalised versions; Chapter 6, “Reversibility and foldability of Conway tiles” (pp. 265–344), folds strips into rectangular dihedra.</span></li>
+
+<li>J. Akiyama, K. Hirata, <span class="t">On convex developments of a doubly-covered square</span>, in: Combinatorial Geometry and Graph Theory (IJCCGGT 2003), Lecture Notes in Computer Science 3330, Springer, 2005, pp. 1–13. <a href="https://doi.org/10.1007/978-3-540-30540-8_1">doi:10.1007/978-3-540-30540-8_1</a>
+<span class="note">Early study of the nets of the doubly covered square.</span></li>
+
+<li>S. Langerman, A. Winslow, <span class="t">A complete classification of tile-makers</span>, Japan Conference on Discrete and Computational Geometry and Graphs (JCDCGG), 2015. <a href="https://andrewwinslow.com/papers/tilemakers-jcdcgg15.pdf">andrewwinslow.com/papers/tilemakers-jcdcgg15.pdf</a>
+<span class="note">A closed surface is a tile-maker if and only if every point has angle 360°/<i>m</i>; the nets of tile-makers are exactly the prototiles of isohedral tilings using at least two rotations and no reflections. Hence no closed surface can be an “aperiodic tile-maker”.</span></li>
+
+<li>D. Smith, J. S. Myers, C. S. Kaplan, C. Goodman-Strauss, <span class="t">An aperiodic monotile</span>, Combinatorial Theory 4 (1) (2024), article 6. <a href="https://doi.org/10.5070/C64163843">doi:10.5070/C64163843</a> · <a href="https://arxiv.org/abs/2303.10798">arXiv:2303.10798</a>
+<span class="note">The hat, the family Tile(<i>a</i>,<i>b</i>) (the 13-gon treated as a 14-gon, Section 6), the H, T, P, F metatiles and the substitution used by the editor. Every hat tiling uses reflected hats; the metatile decomposition bounds their proportion by one quarter.</span></li>
+
+<li>D. Smith, J. S. Myers, C. S. Kaplan, C. Goodman-Strauss, <span class="t">A chiral aperiodic monotile</span>, Combinatorial Theory 4 (2) (2024). <a href="https://doi.org/10.5070/C64264241">doi:10.5070/C64264241</a> · <a href="https://arxiv.org/abs/2305.17743">arXiv:2305.17743</a>
+<span class="note">The Spectre: Tile(1,1) with every edge replaced by alternating copies of one curve, or by a curve with half-turn symmetry (Lemma 2.1), which forbids reflections. The authors call different curve choices “trivial modifications of tiling edges”.</span></li>
+
+<li>M. Baake, F. Gähler, L. Sadun, <span class="t">Dynamics and topology of the Hat family of tilings</span>, Israel Journal of Mathematics 270 (2025) 449–485. <a href="https://doi.org/10.1007/s11856-025-2780-8">doi:10.1007/s11856-025-2780-8</a> · <a href="https://arxiv.org/abs/2305.05639">arXiv:2305.05639</a>
+<span class="note">Shape deformations of the hat family: a four-dimensional family of linear deformations, all topologically conjugate; curving edges is a trivial change in this framework.</span></li>
+
+<li>M. Baake, F. Gähler, J. Mazáč, L. Sadun, <span class="t">On the long-range order of the Spectre tilings</span>, Discrete &amp; Computational Geometry 76 (2025) 739–762. <a href="https://doi.org/10.1007/s00454-025-00756-z">doi:10.1007/s00454-025-00756-z</a>
+<span class="note">Spectral and dynamical properties of the Spectre tilings; the results are independent of the edge curve.</span></li>
+
+<li>A. Clark, L. Sadun, <span class="t">When shape matters: deformations of tiling spaces</span>, Ergodic Theory and Dynamical Systems 26 (1) (2006) 69–86. <a href="https://doi.org/10.1017/S0143385705000623">doi:10.1017/S0143385705000623</a>
+<span class="note">The general theory of shape deformations of tilings and when they change the tiling space.</span></li>
+
+<li>J. Akiyama, E. D. Demaine, S. Langerman, <span class="t">Polyhedral characterization of reversible hinged dissections</span>, Graphs and Combinatorics 36 (2020) 221–229. <a href="https://doi.org/10.1007/s00373-019-02041-2">doi:10.1007/s00373-019-02041-2</a> · <a href="https://arxiv.org/abs/1803.01172">arXiv:1803.01172</a>
+<span class="note">“Envelope magic” as the dihedral case of “parcel magic”: reversible hinged dissections come from nets of a common polyhedron.</span></li>
+
+<li>D. Schattschneider, <span class="t">Will it tile? Try the Conway criterion!</span>, Mathematics Magazine 53 (4) (1980) 224–233. <a href="https://doi.org/10.1080/0025570X.1980.11976859">doi:10.1080/0025570X.1980.11976859</a>
+<span class="note">The Conway criterion used by the editor to test nets of non-tile-makers: a boundary split into six arcs, two of them translates and the other four centrally symmetric.</span></li>
+
+<li>H. Heesch, O. Kienzle, <span class="t">Flächenschluß: System der Formen lückenlos aneinanderschließender Flachteile</span>, Springer, Berlin, 1963. <a href="https://doi.org/10.1007/978-3-642-94883-1">doi:10.1007/978-3-642-94883-1</a>
+<span class="note">The 28 Heesch types: which edge symmetries (translation, half-turn, glide) are allowed on each edge of an isohedral tile, the origin of the edge-class idea.</span></li>
+
+<li>B. Grünbaum, G. C. Shephard, <span class="t">Tilings and Patterns</span>, W. H. Freeman, New York, 1987 (reprinted by Dover, 2016).
+<span class="note">Chapter 6: the 81 isohedral types, with the Heesch-type edge symmetries, and the standard reference for modifying tile edges.</span></li>
+
+<li>C. S. Kaplan, <span class="t">hatviz</span> (software, BSD-3 licence), <a href="https://github.com/isohedral/hatviz">github.com/isohedral/hatviz</a>; the hat and Spectre pages, <a href="https://cs.uwaterloo.ca/~csk/hat/">cs.uwaterloo.ca/~csk/hat</a> and <a href="https://cs.uwaterloo.ca/~csk/spectre/">cs.uwaterloo.ca/~csk/spectre</a>.
+<span class="note">The substitution rules for hat patches in the editor are ported from hatviz; the Spectre substitution follows the chiral paper.</span></li>
+</ol>
+
+<p class="foot">These notes accompany the Envelope Tilings editor (MIT licence). Comments and corrections: open an issue at github.com/zevahcle/envelope-tilings.</p>
+</body>
+</html>

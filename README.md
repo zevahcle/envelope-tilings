@@ -22,6 +22,9 @@ your browser; nothing is sent anywhere.
    The right panel shows a patch of the tiling. Hat-family tiles are rigid (every edge stays straight); the Spectre has one free class.
 5. **Share** copies a link that holds the full state; **SVG tile** / **SVG tiling** export the drawings.
 
+A three-page PDF with the mathematical background and checked references for the interested reader:
+[references.pdf](https://zevahcle.github.io/envelope-tilings/references.pdf) (source in `docs/references/`, rebuilt with `node scripts/pdf.mjs docs/references/index.html public/references.pdf`).
+
 Keyboard: `D` draw, `H` hinge, `E` erase, `P` pan, `Space` unfold, `⌘Z` / `⌘⇧Z` undo and redo. Drag with the right mouse button or the Pan tool to move; scroll to zoom.
 
 The same file is also served at https://zevahcle.github.io/envelope-tilings/envelope-tilings.html.

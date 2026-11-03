@@ -108,6 +108,7 @@ export function mountApp(root: HTMLElement): void {
       h('p', {}, ['2. Cut the front sheet. Each flap stays attached along one straight hinge (orange).']),
       h('p', {}, ['3. Open it flat. Flipping paper reflects it, so flaps are mirrored across their hinges.']),
       h('p', {}, ['4. For rectangles and the three Coxeter triangles the net always tiles (Akiyama’s tile-maker theorem). For other polygons it usually does not.']),
+      h('p', {}, [h('a', { href: 'https://zevahcle.github.io/envelope-tilings/references.pdf', target: '_blank', rel: 'noopener' }, ['Notes and references (PDF)'])]),
     ]),
   ]);
 
@@ -148,6 +149,7 @@ export function mountApp(root: HTMLElement): void {
       h('p', {}, ['In every tiling of the patch, edge i of one tile meets edge j of a neighbour either directly (related by a half-turn, R) or through a reflection (M).']),
       h('p', {}, ['Edges linked by contacts form classes: one drawn curve determines the whole class. A cycle of contacts can force the curve to be symmetric, or straight.']),
       h('p', {}, ['The hat is rigid: every class contains a mirror constraint. The Spectre has one free class. Lattice tiles have one free class per pair of opposite edges.']),
+      h('p', {}, [h('a', { href: 'https://zevahcle.github.io/envelope-tilings/references.pdf', target: '_blank', rel: 'noopener' }, ['Notes and references (PDF)'])]),
     ]),
   ]);
 
