@@ -45,5 +45,5 @@ Run: `npm run dev` → http://localhost:5173/. Tests: `npm test` (57 passing).
 - Explain stepper / guided tour; gallery of paper figures as preset links.
 - Conway decomposition drawn on the net (break points, half-turn centres).
 - Curve editing by control points; corridors ("safe zones") in Seam mode.
-- Deploy to GitHub Pages; single-file build.
+- Done: Pages workflow (.github/workflows/pages.yml) and `npm run build:single` standalone file.
 - Paper draft (`paper/`).
