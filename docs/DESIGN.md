@@ -1,7 +1,10 @@
 # Envelope Tilings — Design Document
 
-Status: v0.1, 2026-11-03. Pre-coding specification for (1) the interactive
-editor and (2) the companion paper. Everything here is the plan we agreed to
+Status: v0.2, 2026-11-03. Specification for (1) the interactive editor and
+(2) the companion paper. Implementation status: Envelope mode and Seam mode
+are built (see `docs/STATUS.md`); the hat was found to be rigid under edge
+curving (`docs/CUT_CLASS.md`), so Theorem B applies non-trivially to lattice
+tiles and the Spectre only. Everything here is the plan we agreed to
 build; items marked **[verify]** are claims or citations to confirm before they
 go into the paper.
 
