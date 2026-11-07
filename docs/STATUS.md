@@ -41,6 +41,9 @@ Run: `npm run dev` → http://localhost:5173/. Tests: `npm test` (57 passing).
 
 - Envelope mode: "Net only" checkbox draws the unfolded net as a single filled shape (no envelope border, hinges or cut lines on top); SVG tile export follows the view.
 
+- Decorate mode (both tabs): ports closed under the tiling's edge matching (computed from the placed copies, so it handles mirrored hat contacts), connecting Bézier curves perpendicular to the border, brush, swatch/dot, fill, erase, palettes (solid, rainbow, bright, contrast, custom), pattern presets, borders toggle, opposite palette on reflected tiles; undo and share links include the decoration. Tests in test/decor.test.ts.
+- Envelope tiling draws the fold lines inside each tile so the original polygon's orientation is visible.
+
 ## Not yet done
 - Explain stepper / guided tour; gallery of paper figures as preset links.
 - Conway decomposition drawn on the net (break points, half-turn centres).

@@ -1,7 +1,10 @@
 import { type Cut, type HingeSpec } from '../envelope/model';
 import { type SeamCurves } from '../seam/deform';
+import { type Decor } from '../decor/model';
+import { type PaletteId } from '../decor/palette';
 
 export type Tool = 'draw' | 'hinge' | 'erase' | 'pan';
+export type DecorTool = 'port' | 'connect' | 'brush' | 'swatch' | 'erase' | 'pan';
 
 export interface AppState {
   mode: 'envelope' | 'seam';
@@ -22,9 +25,27 @@ export interface AppState {
   curves: SeamCurves;
   /** class representative selected for presets */
   selectedClass: number | null;
+  /* decoration (both modes) */
+  decorate: boolean;
+  decorEnv: Decor;
+  decorSeam: Decor;
+  /** draw tile outlines in the tiling */
+  borders: boolean;
+  /** reflected tiles use the opposite-hue palette */
+  mirrorPalette: boolean;
+  decorTool: DecorTool;
+  color: string;
+  /** brush width in percent of the tile size */
+  brush: number;
+  opacity: number;
+  bend: number;
+  palette: PaletteId;
 }
 
-export type Snapshot = Pick<AppState, 'tileId' | 'params' | 'cuts' | 'hinges' | 'seamTileId' | 'seamParams' | 'seamLevel' | 'curves' | 'mode'>;
+export type Snapshot = Pick<
+  AppState,
+  'tileId' | 'params' | 'cuts' | 'hinges' | 'seamTileId' | 'seamParams' | 'seamLevel' | 'curves' | 'mode' | 'decorate' | 'decorEnv' | 'decorSeam' | 'borders' | 'mirrorPalette'
+>;
 
 export const snapshot = (s: AppState): Snapshot => ({
   mode: s.mode,
@@ -36,6 +57,11 @@ export const snapshot = (s: AppState): Snapshot => ({
   seamParams: { ...s.seamParams },
   seamLevel: s.seamLevel,
   curves: Object.fromEntries(Object.entries(s.curves).map(([k, v]) => [k, v.slice()])),
+  decorate: s.decorate,
+  decorEnv: structuredClone(s.decorEnv),
+  decorSeam: structuredClone(s.decorSeam),
+  borders: s.borders,
+  mirrorPalette: s.mirrorPalette,
 });
 
 export class Store {

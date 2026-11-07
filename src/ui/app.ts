@@ -1,4 +1,4 @@
-import { Store, type AppState, type Tool, type Snapshot, snapshot } from '../app/store';
+import { Store, type AppState, type Tool, type DecorTool, type Snapshot, snapshot } from '../app/store';
 import { encodeState, decodeState, readHash, writeHash } from '../app/url';
 import { TILES, tileById, defaultParams } from '../tiles/library';
 import { computeUnfolding, type Unfolding } from '../envelope/model';
@@ -14,7 +14,12 @@ import { SeamEditor, classColor } from './seamEditor';
 import { SeamPreview } from './seamPreview';
 import { download } from '../render/svgcanvas';
 import { ensureCCW, isSimple, type Polygon } from '../geom/polygon';
-import { type Vec } from '../geom/vec';
+import { type Vec, dist } from '../geom/vec';
+import { cornerIndices } from '../envelope/conway';
+import { type Decor, type Port, emptyDecor, portOrbits, Boundary, sideMidpoints, rng, brushWidth } from '../decor/model';
+import { PALETTES, type PaletteId } from '../decor/palette';
+import { DecorEditor, type DecorContext } from './decorEditor';
+import { type Iso } from '../geom/isometry';
 
 const h = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -48,6 +53,17 @@ export function mountApp(root: HTMLElement): void {
     seamLevel: seamFirst.defaultLevel,
     curves: {},
     selectedClass: null,
+    decorate: false,
+    decorEnv: emptyDecor(),
+    decorSeam: emptyDecor(),
+    borders: true,
+    mirrorPalette: false,
+    decorTool: 'connect',
+    color: '#2b3f8c',
+    brush: 10,
+    opacity: 1,
+    bend: 0.5,
+    palette: 'solid',
   });
   const base0 = first.build(defaultParams(first));
   store.commit(PRESETS[0]!.make(base0), 'Draw a cut on the front sheet of the envelope.');
@@ -64,9 +80,11 @@ export function mountApp(root: HTMLElement): void {
   const shareBtn = h('button', { class: 'btn', title: 'Copy a link to this state' }, ['Share']);
   const tabEnvelope = h('button', { class: 'tab active', role: 'tab' }, ['Envelope']);
   const tabSeam = h('button', { class: 'tab', role: 'tab' }, ['Seam']);
+  const decorateBtn = h('button', { class: 'btn toggle', title: 'Decorate the tile: curves, colours and swatches' }, ['🎨 Decorate']);
   const header = h('header', { class: 'topbar' }, [
     h('div', { class: 'brand' }, ['Envelope Tilings']),
     h('div', { class: 'tabs', role: 'tablist' }, [tabEnvelope, tabSeam]),
+    decorateBtn,
     h('div', { class: 'spacer' }),
     h('label', { class: 'field' }, ['Tile ', tileSelect]),
     paramBox,
@@ -154,14 +172,87 @@ export function mountApp(root: HTMLElement): void {
     ]),
   ]);
 
-  const sidebar = h('aside', { class: 'sidebar' }, [envelopeSidebar, seamSidebar]);
+  /* ---------- sidebar: decorate ---------- */
+  const decorTools: Record<DecorTool, HTMLButtonElement> = {
+    connect: h('button', { class: 'tool', title: 'C' }, ['⤳ Connect ports']),
+    port: h('button', { class: 'tool', title: 'P' }, ['◉ Add / remove port']),
+    brush: h('button', { class: 'tool', title: 'B' }, ['🖌 Brush']),
+    swatch: h('button', { class: 'tool', title: 'S' }, ['⬤ Swatch (drag) / dot (click)']),
+    erase: h('button', { class: 'tool', title: 'E' }, ['⌫ Erase item']),
+    pan: h('button', { class: 'tool', title: 'V' }, ['✥ Pan']),
+  };
+  const paletteTabs = h('div', { class: 'palette-tabs' });
+  const paletteTabButtons = {} as Record<PaletteId, HTMLButtonElement>;
+  for (const id of Object.keys(PALETTES) as PaletteId[]) {
+    const b = h('button', { class: 'ptab' }, [PALETTES[id].name]);
+    b.onclick = () => store.set({ palette: id });
+    paletteTabButtons[id] = b;
+    paletteTabs.append(b);
+  }
+  const paletteGrid = h('div', { class: 'palette-grid' });
+  const customColor = h('input', { type: 'color', class: 'color-input', 'aria-label': 'Custom colour', value: '#2b3f8c' });
+  customColor.oninput = () => store.set({ color: customColor.value });
+  const currentSwatch = h('span', { class: 'current-color' });
+  const widthSlider = h('input', { type: 'range', min: '1', max: '40', step: '1', value: '10', class: 'slider', 'aria-label': 'Width' });
+  const opacitySlider = h('input', { type: 'range', min: '0.1', max: '1', step: '0.05', value: '1', class: 'slider', 'aria-label': 'Opacity' });
+  const bendSlider = h('input', { type: 'range', min: '0.05', max: '1.4', step: '0.05', value: '0.5', class: 'slider', 'aria-label': 'Curve bend' });
+  widthSlider.oninput = () => store.set({ brush: Number(widthSlider.value) });
+  opacitySlider.oninput = () => store.set({ opacity: Number(opacitySlider.value) });
+  bendSlider.oninput = () => store.set({ bend: Number(bendSlider.value) });
+  const fillBtn = h('button', { class: 'btn' }, ['Fill tile']);
+  const noFillBtn = h('button', { class: 'btn' }, ['No fill']);
+  const recolorBtn = h('button', { class: 'btn wide' }, ['Recolour curves from palette']);
+  const decorPresets: { id: 'mid' | 'arcs' | 'across' | 'random'; name: string }[] = [
+    { id: 'mid', name: 'Ports at side midpoints' },
+    { id: 'arcs', name: 'Arcs around corners' },
+    { id: 'across', name: 'Lines across the tile' },
+    { id: 'random', name: 'Random pairing' },
+  ];
+  const decorPresetBox = h('div', { class: 'stack' });
+  for (const p of decorPresets) {
+    const b = h('button', { class: 'btn wide' }, [p.name]);
+    b.onclick = () => applyDecorPreset(p.id);
+    decorPresetBox.append(b);
+  }
+  const clearDecorBtn = h('button', { class: 'btn wide' }, ['Clear decoration']);
+  const bordersBox = h('input', { type: 'checkbox', 'aria-label': 'Show tile borders' });
+  const mirrorBox = h('input', { type: 'checkbox', 'aria-label': 'Different palette on reflected tiles' });
+  const mirrorField = h('label', { class: 'field check' }, [mirrorBox, ' Opposite colours on reflected tiles']);
+  const decorSidebar = h('div', { class: 'stack' }, [
+    h('h2', {}, ['Decorate']),
+    h('div', { class: 'stack' }, Object.values(decorTools)),
+    h('h2', {}, ['Colour']),
+    paletteTabs,
+    paletteGrid,
+    h('div', { class: 'row' }, [currentSwatch, h('span', { class: 'muted' }, ['custom']), customColor]),
+    h('div', { class: 'row' }, [h('span', { class: 'muted lbl' }, ['width']), widthSlider]),
+    h('div', { class: 'row' }, [h('span', { class: 'muted lbl' }, ['opacity']), opacitySlider]),
+    h('div', { class: 'row' }, [h('span', { class: 'muted lbl' }, ['bend']), bendSlider]),
+    h('div', { class: 'row' }, [fillBtn, noFillBtn]),
+    h('h2', {}, ['Pattern presets']),
+    decorPresetBox,
+    recolorBtn,
+    clearDecorBtn,
+    h('h2', {}, ['View']),
+    h('label', { class: 'field check' }, [bordersBox, ' Show tile borders']),
+    mirrorField,
+    h('h2', {}, ['How it works']),
+    h('div', { class: 'explain' }, [
+      h('p', {}, ['Ports are points on the border where curves pass into the next tile. Adding one port adds its partners: the points where neighbouring tiles touch it (dashed rings).']),
+      h('p', {}, ['Connect ports in pairs. Curves leave the border at a right angle, so they continue smoothly across tiles. Orange rings are open ends.']),
+      h('p', {}, ['Everything drawn here repeats in every tile; reflected tiles (the hat) show it mirrored. Untick “Show tile borders” to see the pattern alone.']),
+    ]),
+  ]);
+
+  const sidebar = h('aside', { class: 'sidebar' }, [envelopeSidebar, seamSidebar, decorSidebar]);
   const envelopeEditorBox = h('div', { class: 'fill' });
   const seamEditorBox = h('div', { class: 'fill' });
   const envelopePreviewBox = h('div', { class: 'fill' });
   const seamPreviewBox = h('div', { class: 'fill' });
   const editorTitle = h('div', { class: 'pane-title' }, ['Envelope']);
   const previewTitle = h('div', { class: 'pane-title' }, ['Tiling by the net']);
-  const editorPane = h('section', { class: 'pane editor' }, [editorTitle, envelopeEditorBox, seamEditorBox]);
+  const decorEditorBox = h('div', { class: 'fill' });
+  const editorPane = h('section', { class: 'pane editor' }, [editorTitle, envelopeEditorBox, seamEditorBox, decorEditorBox]);
   const previewPane = h('section', { class: 'pane preview' }, [previewTitle, envelopePreviewBox, seamPreviewBox]);
   const status = h('footer', { class: 'status', 'aria-live': 'polite' });
   root.append(header, h('main', { class: 'main' }, [sidebar, editorPane, previewPane]), status);
@@ -170,6 +261,9 @@ export function mountApp(root: HTMLElement): void {
   const preview = new TilingPreview(envelopePreviewBox);
   const seamEditor = new SeamEditor(seamEditorBox, store);
   const seamPreview = new SeamPreview(seamPreviewBox);
+  const decorKey = (s: AppState) => (s.mode === 'envelope' ? 'decorEnv' : 'decorSeam') as 'decorEnv' | 'decorSeam';
+  const commitDecor = (d: Decor, message: string) => store.commit({ [decorKey(store.get())]: d } as Partial<Snapshot>, message);
+  const decorEditor = new DecorEditor(decorEditorBox, store, commitDecor);
 
   /* ---------- derived: envelope ---------- */
   function currentBase(s: AppState): Polygon {
@@ -250,6 +344,117 @@ export function mountApp(root: HTMLElement): void {
     store.set({ selectedClass: cls.rep });
   }
 
+  /* ---------- derived: decoration ---------- */
+  interface DecorFrame {
+    tile: Polygon;
+    isos: Iso[];
+    corners: number[];
+    key: string;
+    problem: string | null;
+  }
+  function decorFrame(s: AppState): DecorFrame | null {
+    if (s.mode === 'envelope') {
+      const { u, t } = deriveEnvelope(s);
+      if (!u.outline) return null;
+      const isos = t ? t.copies.filter((k) => !k.overlapping).map((k) => k.iso) : [];
+      const problem = !t ? 'This net does not flatten, so there is no tiling to decorate.' : !t.tiles ? 'No tiling was found for this net; ports have no partners.' : null;
+      return { tile: u.outline, isos: t?.tiles ? isos : [], corners: cornerIndices(u.outline, 8), key: 'env' + envKey, problem };
+    }
+    const d = deriveSeam(s);
+    const isos = d.placements.filter((_, k) => !d.patch.overlapping[k]).map((p) => p.iso);
+    const corners = d.base.map((v) => {
+      let bi = 0;
+      let bd = Infinity;
+      d.tile.forEach((q, i) => {
+        const e = dist(q, v);
+        if (e < bd) {
+          bd = e;
+          bi = i;
+        }
+      });
+      return bi;
+    });
+    const problem = !d.simple ? 'The tile crosses itself.' : d.patch.anyOverlap ? 'Tiles overlap in the patch.' : null;
+    return { tile: d.tile, isos, corners, key: 'seam' + d.key + JSON.stringify(s.curves), problem };
+  }
+  let portKey = '';
+  let portCache: Port[] = [];
+  function portsFor(frame: DecorFrame, decor: Decor): Port[] {
+    const seeds = [...decor.ports, ...decor.curves.flatMap((c) => [c.a, c.b])];
+    const key = frame.key + JSON.stringify(seeds);
+    if (key !== portKey) {
+      portCache = portOrbits(frame.tile, frame.isos, seeds);
+      portKey = key;
+    }
+    return portCache;
+  }
+  function applyDecorPreset(id: 'mid' | 'arcs' | 'across' | 'random'): void {
+    const s = store.get();
+    const frame = decorFrame(s);
+    if (!frame) {
+      store.set({ message: 'Unfold a net that tiles first.' });
+      return;
+    }
+    const decor = s[decorKey(s)];
+    const B = new Boundary(frame.tile);
+    const mids = sideMidpoints(B, frame.corners);
+    if (id === 'mid') {
+      commitDecor({ ...decor, ports: mids }, 'ports at the side midpoints');
+      return;
+    }
+    const ports = portOrbits(frame.tile, frame.isos, mids).map((p) => p.f);
+    const n = ports.length;
+    const order = [...ports];
+    if (id === 'random') {
+      const r = rng(Date.now() & 0xffff);
+      for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(r() * (i + 1));
+        [order[i], order[j]] = [order[j]!, order[i]!];
+      }
+    }
+    const pairs: [number, number][] = [];
+    if (id === 'across') for (let i = 0; i < Math.floor(n / 2); i++) pairs.push([order[i]!, order[i + Math.floor(n / 2)]!]);
+    else for (let i = 0; i + 1 < n; i += 2) pairs.push([order[i]!, order[i + 1]!]);
+    const width = brushWidth(frame.tile, s.brush);
+    const curves = pairs.map(([a, b]) => ({ a, b, color: s.color, width, bend: id === 'across' ? Math.min(s.bend, 0.35) : s.bend }));
+    commitDecor({ ...decor, ports: mids, curves }, `${n} ports, ${curves.length} curves`);
+  }
+  function recolorCurves(): void {
+    const s = store.get();
+    const decor = s[decorKey(s)];
+    const cols = PALETTES[s.palette].colors.filter((c) => c !== '#ffffff');
+    commitDecor({ ...decor, curves: decor.curves.map((c, i) => ({ ...c, color: cols[i % cols.length]! })) }, 'curves recoloured');
+  }
+  recolorBtn.onclick = recolorCurves;
+  clearDecorBtn.onclick = () => commitDecor(emptyDecor(), 'decoration cleared');
+  fillBtn.onclick = () => {
+    const s = store.get();
+    commitDecor({ ...s[decorKey(s)], background: s.color }, 'tile filled');
+  };
+  noFillBtn.onclick = () => {
+    const s = store.get();
+    commitDecor({ ...s[decorKey(s)], background: null }, 'tile fill removed');
+  };
+  bordersBox.onchange = () => store.commit({ borders: bordersBox.checked }, bordersBox.checked ? 'borders shown' : 'borders hidden');
+  mirrorBox.onchange = () => store.commit({ mirrorPalette: mirrorBox.checked });
+  decorateBtn.onclick = () => store.commit({ decorate: !store.get().decorate }, store.get().decorate ? '' : 'Decorate: add ports, connect them, paint.');
+  for (const [name, b] of Object.entries(decorTools)) b.onclick = () => store.set({ decorTool: name as DecorTool });
+  let paletteShown = '';
+  function renderPalette(s: AppState): void {
+    for (const [id, b] of Object.entries(paletteTabButtons)) b.classList.toggle('active', id === s.palette);
+    const key = s.palette + s.color;
+    if (key === paletteShown) return;
+    paletteShown = key;
+    paletteGrid.replaceChildren();
+    for (const col of PALETTES[s.palette].colors) {
+      const b = h('button', { class: `color-cell ${col === s.color ? 'active' : ''}`, style: `background:${col}`, title: col, 'aria-label': col });
+      b.onclick = () => store.set({ color: col });
+      paletteGrid.append(b);
+    }
+    currentSwatch.style.background = s.color;
+    if (/^#[0-9a-f]{6}$/i.test(s.color)) customColor.value = s.color;
+  }
+
   /* ---------- rendering ---------- */
   function renderTileSelect(s: AppState): void {
     tileSelect.replaceChildren();
@@ -301,23 +506,50 @@ export function mountApp(root: HTMLElement): void {
     }
     tabEnvelope.classList.toggle('active', s.mode === 'envelope');
     tabSeam.classList.toggle('active', s.mode === 'seam');
-    envelopeSidebar.style.display = s.mode === 'envelope' ? '' : 'none';
-    seamSidebar.style.display = s.mode === 'seam' ? '' : 'none';
-    envelopeEditorBox.style.display = envelopePreviewBox.style.display = s.mode === 'envelope' ? '' : 'none';
-    seamEditorBox.style.display = seamPreviewBox.style.display = s.mode === 'seam' ? '' : 'none';
+    envelopeSidebar.style.display = s.mode === 'envelope' && !s.decorate ? '' : 'none';
+    seamSidebar.style.display = s.mode === 'seam' && !s.decorate ? '' : 'none';
+    decorSidebar.style.display = s.decorate ? '' : 'none';
+    envelopeEditorBox.style.display = s.mode === 'envelope' && !s.decorate ? '' : 'none';
+    seamEditorBox.style.display = s.mode === 'seam' && !s.decorate ? '' : 'none';
+    decorEditorBox.style.display = s.decorate ? '' : 'none';
+    envelopePreviewBox.style.display = s.mode === 'envelope' ? '' : 'none';
+    seamPreviewBox.style.display = s.mode === 'seam' ? '' : 'none';
+    decorateBtn.classList.toggle('active', s.decorate);
+    bordersBox.checked = s.borders;
+    mirrorBox.checked = s.mirrorPalette;
+    mirrorField.style.display = s.mode === 'seam' ? '' : 'none';
+    for (const [name, b] of Object.entries(decorTools)) b.classList.toggle('active', name === s.decorTool);
+    widthSlider.value = String(s.brush);
+    opacitySlider.value = String(s.opacity);
+    bendSlider.value = String(s.bend);
+    renderPalette(s);
+    const decor = s[decorKey(s)];
+    const frame = decorFrame(s);
+    const ports = frame ? portsFor(frame, decor) : [];
+    if (s.decorate) {
+      editorTitle.textContent = 'Decorate the tile';
+      const ctx: DecorContext | null = frame ? { tile: frame.tile, ports, decor, key: frame.key } : null;
+      decorEditor.render(ctx);
+    }
     undoBtn.disabled = !store.canUndo;
     redoBtn.disabled = !store.canRedo;
 
     if (s.mode === 'envelope') {
-      editorTitle.textContent = 'Envelope';
+      if (!s.decorate) editorTitle.textContent = 'Envelope';
       for (const [name, b] of Object.entries(toolButtons)) b.classList.toggle('active', name === s.tool);
       if (Number(openSlider.value) !== s.open) openSlider.value = String(s.open);
       netOnlyBox.checked = s.netOnly;
       const { base, u, t } = deriveEnvelope(s);
       previewTitle.textContent = t && !t.tiles ? 'Development of the net (overlaps in red)' : 'Tiling by the net';
       const tileKey = s.tileId + JSON.stringify(s.params);
-      editor.render(base, u, s.open, tileKey, s.netOnly);
-      preview.render(t, base, tileKey, u.flaps.map((f) => [f.hinge.a, f.hinge.b] as [Vec, Vec]));
+      if (!s.decorate) editor.render(base, u, s.open, tileKey, s.netOnly);
+      preview.render(
+        t,
+        base,
+        tileKey,
+        u.flaps.map((f) => [f.hinge.a, f.hinge.b] as [Vec, Vec]),
+        u.outline ? { tile: u.outline, decor, borders: s.borders } : null,
+      );
       const tile = tileById(s.tileId);
       const parts = [
         `${u.pieces.length} flap${u.pieces.length === 1 ? '' : 's'}`,
@@ -331,14 +563,14 @@ export function mountApp(root: HTMLElement): void {
         h('span', { class: `status-note ${problem ? 'bad' : ''}` }, [problem ?? s.message ?? tile.note]),
       );
     } else {
-      editorTitle.textContent = 'Tile and edge classes';
+      if (!s.decorate) editorTitle.textContent = 'Tile and edge classes';
       previewTitle.textContent = 'Patch of the tiling';
       for (const [name, b] of Object.entries(seamTools)) b.classList.toggle('active', name === s.tool);
       const d = deriveSeam(s);
       const sel = selectedClassOf(s, d.classes);
       renderClassTable(s, d.classes, sel);
-      seamEditor.render({ base: d.base, classes: d.classes, deformed: d.tile, curves: s.curves }, d.key, sel?.rep ?? null);
-      seamPreview.render(d.tile, d.placements, d.patch, d.key);
+      if (!s.decorate) seamEditor.render({ base: d.base, classes: d.classes, deformed: d.tile, curves: s.curves }, d.key, sel?.rep ?? null);
+      seamPreview.render(d.tile, d.placements, d.patch, d.key, { decor, borders: s.borders, mirrorPalette: s.mirrorPalette });
       const free = d.classes.filter((c) => c.verdict === 'free').length;
       const sym = d.classes.filter((c) => c.verdict === 'centrally symmetric' || c.verdict === 'mirror symmetric').length;
       const straight = d.classes.filter((c) => c.verdict === 'straight').length;
@@ -350,6 +582,22 @@ export function mountApp(root: HTMLElement): void {
       const bad = d.report.badGroups + d.report.partial + d.report.crossings + d.report.angleBad;
       const note = bad ? `patch validation failed (${bad} problems)` : (s.message || seamTileById(s.seamTileId).note);
       status.replaceChildren(h('span', { class: 'status-main' }, [parts.join(' · ')]), h('span', { class: `status-note ${bad ? 'bad' : ''}` }, [note]));
+    }
+    if (s.decorate) {
+      const close = (a: number, b: number) => Math.min(Math.abs(a - b), 1 - Math.abs(a - b)) < 2e-4;
+      const open = ports.filter((p) => !decor.curves.some((c) => close(c.a, p.f) || close(c.b, p.f))).length;
+      const forced = ports.filter((p) => !p.user).length;
+      const parts = [
+        `${ports.length} port${ports.length === 1 ? '' : 's'} (${forced} forced)`,
+        `${decor.curves.length} curve${decor.curves.length === 1 ? '' : 's'}`,
+        `${open} open end${open === 1 ? '' : 's'}`,
+        `${decor.strokes.length + decor.swatches.length} painted`,
+      ];
+      const problem = !frame ? 'Unfold a net first: the decoration lives on the net.' : frame.problem;
+      status.replaceChildren(
+        h('span', { class: 'status-main' }, [parts.join(' · ')]),
+        h('span', { class: `status-note ${problem ? 'bad' : ''}` }, [problem ?? s.message ?? '']),
+      );
     }
     scheduleHash();
   });
@@ -407,7 +655,11 @@ export function mountApp(root: HTMLElement): void {
   }
   undoBtn.onclick = () => store.undo();
   redoBtn.onclick = () => store.redo();
-  exportEditor.onclick = () => download(store.get().mode === 'envelope' ? 'envelope-net.svg' : 'seam-tile.svg', (store.get().mode === 'envelope' ? editor : seamEditor).canvas.serialize());
+  exportEditor.onclick = () => {
+    const s = store.get();
+    const src = s.decorate ? decorEditor : s.mode === 'envelope' ? editor : seamEditor;
+    download(s.decorate ? 'decorated-tile.svg' : s.mode === 'envelope' ? 'envelope-net.svg' : 'seam-tile.svg', src.canvas.serialize());
+  };
   exportPreview.onclick = () => download(store.get().mode === 'envelope' ? 'envelope-tiling.svg' : 'seam-tiling.svg', (store.get().mode === 'envelope' ? preview : seamPreview).canvas.serialize());
   openSlider.oninput = () => store.set({ open: Number(openSlider.value) });
   netOnlyBox.onchange = () => {
@@ -441,6 +693,16 @@ export function mountApp(root: HTMLElement): void {
     }
     if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement) return;
     const seam = store.get().mode === 'seam';
+    if (store.get().decorate) {
+      const map: Record<string, DecorTool> = { c: 'connect', p: 'port', b: 'brush', s: 'swatch', e: 'erase', v: 'pan' };
+      const t = map[ev.key.toLowerCase()];
+      if (t) store.set({ decorTool: t });
+      if (ev.key === ' ') {
+        decorEditor.canvas.spaceHeld = true;
+        ev.preventDefault();
+      }
+      return;
+    }
     switch (ev.key.toLowerCase()) {
       case 'd': if (seam) store.set({ tool: 'draw' }); else selectTool('draw'); break;
       case 'h': if (!seam) selectTool('hinge'); break;
@@ -451,6 +713,6 @@ export function mountApp(root: HTMLElement): void {
     }
   });
   window.addEventListener('keyup', (ev) => {
-    if (ev.key === ' ') editor.canvas.spaceHeld = seamEditor.canvas.spaceHeld = false;
+    if (ev.key === ' ') editor.canvas.spaceHeld = seamEditor.canvas.spaceHeld = decorEditor.canvas.spaceHeld = false;
   });
 }

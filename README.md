@@ -20,7 +20,13 @@ your browser; nothing is sent anywhere.
    Tick **Net only** to see the unfolded tile alone. The right panel tiles the plane with the net when it can.
 4. **Seam** tab: pick a tile, draw a curve near an edge; the whole edge class follows with its forced symmetry.
    The right panel shows a patch of the tiling. Hat-family tiles are rigid (every edge stays straight); the Spectre has one free class.
-5. **Share** copies a link that holds the full state; **SVG tile** / **SVG tiling** export the drawings.
+5. **🎨 Decorate** (either tab): draw on the tile itself.
+   *Ports* are points on the border where curves cross into the next tile; adding one adds its partners, the points where neighbouring tiles touch it.
+   *Connect ports* joins two ports with a curve that leaves the border at a right angle, so curves run smoothly from tile to tile.
+   The presets (side midpoints, arcs around corners, lines across, random pairing) give Truchet-like patterns in one click.
+   *Brush*, *Swatch* (drag a shape) or *dot* (click), *Fill tile*, and a palette with Solid, Rainbow, Bright and Contrast sets plus a custom colour.
+   Untick **Show tile borders** to see the pattern alone. On the hat, reflected tiles show the art mirrored, and can use opposite colours.
+6. **Share** copies a link that holds the full state; **SVG tile** / **SVG tiling** export the drawings.
 
 A three-page PDF with the mathematical background and checked references for the interested reader:
 [references.pdf](https://zevahcle.github.io/envelope-tilings/references.pdf) (source in `docs/references/`, rebuilt with `node scripts/pdf.mjs docs/references/index.html public/references.pdf`).
