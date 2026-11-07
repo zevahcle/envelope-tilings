@@ -9,6 +9,7 @@ import { type Vec } from '../geom/vec';
 import { type Polygon, bounds, pointInPolygon, area, type Bounds } from '../geom/polygon';
 import { type Iso, apply, compose, translation } from '../geom/isometry';
 import { type Decor } from '../decor/model';
+import { type ResolvedFill } from '../decor/regions';
 
 export interface SourceCopy {
   iso: Iso;
@@ -24,6 +25,7 @@ export interface PrintSource {
   patch?: (level: number) => SourceCopy[] | null;
   startLevel?: number;
   decor: Decor;
+  fills: ResolvedFill[];
   mirror: boolean;
   borders: boolean;
   name: string;
@@ -83,6 +85,7 @@ export interface PrintLayout {
   sizeMM: number;
   covered: boolean;
   decor: Decor;
+  fills: ResolvedFill[];
   mirror: boolean;
   borders: boolean;
   borderPt: number;
@@ -237,6 +240,7 @@ export function layoutPage(src: PrintSource, o: PrintOptions): PrintLayout {
     sizeMM: (size * scale) / PT_PER_MM,
     covered,
     decor: src.decor,
+    fills: src.fills,
     mirror: src.mirror,
     borders: src.borders,
     borderPt: o.borderPt,

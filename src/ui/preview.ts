@@ -5,12 +5,14 @@ import { type Vec } from '../geom/vec';
 import { apply, toSvgTransform } from '../geom/isometry';
 import { type Decor, isEmptyDecor } from '../decor/model';
 import { defineDecor, DEFAULT_TILE_FILL } from '../decor/render';
+import { type ResolvedFill } from '../decor/regions';
 
 export const HUES = [210, 30, 150, 270, 60, 330, 180, 90, 240, 0, 120, 300];
 
 export interface PreviewDecor {
   tile: Polygon;
   decor: Decor;
+  fills: ResolvedFill[];
   borders: boolean;
 }
 
@@ -42,7 +44,7 @@ export class TilingPreview {
     const hasArt = !!deco && !isEmptyDecor(deco.decor);
     if (hasArt) {
       const defs = svgEl('defs');
-      defineDecor(defs, deco.tile, deco.decor, 'env-decor');
+      defineDecor(defs, deco.tile, deco.decor, 'env-decor', { fills: deco.fills, seam: c.px(0.8) });
       c.layer('defs').appendChild(defs);
     }
     const plain = deco?.decor.background ?? (hasArt || !borders ? DEFAULT_TILE_FILL : null);

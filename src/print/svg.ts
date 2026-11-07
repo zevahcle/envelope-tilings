@@ -17,10 +17,10 @@ export function pageSvg(L: PrintLayout, preview = false): SVGSVGElement {
   const clip = svgEl('clipPath', { id: 'pp-art' });
   clip.appendChild(svgEl('rect', { x: L.art.x, y: L.art.y, width: L.art.w, height: L.art.h }));
   defs.appendChild(clip);
-  const hasArt = L.decor.swatches.length + L.decor.curves.length + L.decor.strokes.length > 0;
+  const hasArt = L.fills.length + L.decor.swatches.length + L.decor.curves.length + L.decor.strokes.length > 0;
   const mirror = L.mirror && L.tiles.some((t) => t.reflected);
-  if (hasArt) defineDecor(defs, L.tile, L.decor, 'pp-decor');
-  if (hasArt && mirror) defineDecor(defs, L.tile, L.decor, 'pp-decor-alt', { colorMap: alternateColor });
+  if (hasArt) defineDecor(defs, L.tile, L.decor, 'pp-decor', { fills: L.fills, seam: 0.3 / L.scale });
+  if (hasArt && mirror) defineDecor(defs, L.tile, L.decor, 'pp-decor-alt', { colorMap: alternateColor, fills: L.fills, seam: 0.3 / L.scale });
   svg.appendChild(defs);
   svg.appendChild(svgEl('rect', { x: 0, y: 0, width: L.pageW, height: L.pageH, fill: '#ffffff' }));
   const flip = svgEl('g', { transform: `matrix(1 0 0 -1 0 ${L.pageH})` });

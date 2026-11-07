@@ -25,6 +25,7 @@ your browser; nothing is sent anywhere.
    *Connect ports* joins two ports with a curve that leaves the border at a right angle, so curves run smoothly from tile to tile.
    The presets (side midpoints, arcs around corners, lines across, random pairing) give Truchet-like patterns in one click.
    *Brush*, *Swatch* (drag a shape) or *dot* (click), *Fill tile*, and a palette with Solid, Rainbow, Bright and Contrast sets plus a custom colour.
+   *Fill region* (🪣, key F) colours the region bounded by curves, brush strokes and the border. With **Fill across seams** it also colours the pieces that continue that region in neighbouring tiles, so a whole cell of the pattern takes the colour. Every tile carries the same decoration, so a fill colours that kind of cell everywhere; on the hat, cells that join anywhere in the tiling join everywhere.
    Untick **Show tile borders** to see the pattern alone. On the hat, reflected tiles show the art mirrored, and can use opposite colours.
 6. **🖨 Print** fills one sheet with the tiling (with its decoration) and downloads a vector PDF or SVG.
    Paper: US Letter, Legal, Tabloid (11 × 17 in, double letter), A5, A4, A3, A2; portrait or landscape.

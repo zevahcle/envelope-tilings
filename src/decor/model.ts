@@ -34,20 +34,31 @@ export interface DecorSwatch {
   color: string;
   opacity: number;
 }
+/** Paint-bucket fill: colours the region (bounded by curves, strokes and the tile edge) that contains `p`. */
+export interface DecorFill {
+  /** seed point in tile coordinates; the region is found again after every edit */
+  p: Vec;
+  color: string;
+  opacity: number;
+  /** also fill the regions in neighbouring tiles that join this one across the seams */
+  linked: boolean;
+}
 export interface Decor {
   /** user-placed ports, boundary fractions */
   ports: number[];
   curves: DecorCurve[];
   strokes: DecorStroke[];
   swatches: DecorSwatch[];
+  /** absent in links saved before fills existed */
+  fills?: DecorFill[];
   /** tile fill colour, or null for the default */
   background: string | null;
 }
 
-export const emptyDecor = (): Decor => ({ ports: [], curves: [], strokes: [], swatches: [], background: null });
+export const emptyDecor = (): Decor => ({ ports: [], curves: [], strokes: [], swatches: [], fills: [], background: null });
 
 export const isEmptyDecor = (d: Decor): boolean =>
-  !d.ports.length && !d.curves.length && !d.strokes.length && !d.swatches.length && !d.background;
+  !d.ports.length && !d.curves.length && !d.strokes.length && !d.swatches.length && !d.fills?.length && !d.background;
 
 const frac = (s: number): number => ((s % 1) + 1) % 1;
 
@@ -128,29 +139,65 @@ const fracClose = (a: number, b: number, tol: number) => {
 };
 
 /**
+ * Where the tile's boundary touches its neighbours in a tiling: for a boundary
+ * fraction f of one copy, the fractions q of the neighbouring copies at the
+ * same point of the plane. `isos` place the tile in the plane.
+ */
+export class Contacts {
+  readonly B: Boundary;
+  private eps: number;
+  private cell: number;
+  private grid = new Map<string, number[]>();
+  private inv: Iso[];
+  private boxes: ReturnType<typeof bounds>[];
+  constructor(
+    tile: Polygon,
+    private isos: Iso[],
+  ) {
+    this.B = new Boundary(tile);
+    const bb = bounds(tile);
+    const diam = Math.hypot(bb.maxX - bb.minX, bb.maxY - bb.minY);
+    this.eps = diam * 2e-5;
+    this.cell = diam;
+    this.inv = isos.map(invert);
+    this.boxes = isos.map((g) => bounds(tile.map((p) => apply(g, p))));
+    this.boxes.forEach((b, k) => {
+      for (let i = Math.floor(b.minX / this.cell); i <= Math.floor(b.maxX / this.cell); i++)
+        for (let j = Math.floor(b.minY / this.cell); j <= Math.floor(b.maxY / this.cell); j++) {
+          const key = `${i},${j}`;
+          const list = this.grid.get(key);
+          if (list) list.push(k);
+          else this.grid.set(key, [k]);
+        }
+    });
+  }
+  /** partner fractions of f over all contacts in the tiling (with repeats) */
+  partners(f: number): number[] {
+    const p = this.B.at(f);
+    const out: number[] = [];
+    const eps = this.eps;
+    for (let t = 0; t < this.isos.length; t++) {
+      const w = apply(this.isos[t]!, p);
+      const list = this.grid.get(`${Math.floor(w.x / this.cell)},${Math.floor(w.y / this.cell)}`) ?? [];
+      for (const u of list) {
+        if (u === t) continue;
+        const b = this.boxes[u]!;
+        if (w.x < b.minX - eps || w.x > b.maxX + eps || w.y < b.minY - eps || w.y > b.maxY + eps) continue;
+        const q = this.B.project(apply(this.inv[u]!, w));
+        if (q.d <= eps) out.push(q.f);
+      }
+    }
+    return out;
+  }
+}
+
+/**
  * Close a set of boundary fractions under the matching given by a tiling.
  * `isos` place the tile in the plane; only contacts between copies count.
  */
 export function portOrbits(tile: Polygon, isos: Iso[], seeds: number[], maxPorts = 160): Port[] {
-  const B = new Boundary(tile);
-  const bb = bounds(tile);
-  const diam = Math.hypot(bb.maxX - bb.minX, bb.maxY - bb.minY);
-  const eps = diam * 2e-5;
+  const contacts = new Contacts(tile, isos);
   const ftol = 2e-4;
-  // spatial index of the copies' bounding boxes
-  const cell = diam;
-  const grid = new Map<string, number[]>();
-  const inv = isos.map(invert);
-  const boxes = isos.map((g) => bounds(tile.map((p) => apply(g, p))));
-  boxes.forEach((b, k) => {
-    for (let i = Math.floor(b.minX / cell); i <= Math.floor(b.maxX / cell); i++)
-      for (let j = Math.floor(b.minY / cell); j <= Math.floor(b.maxY / cell); j++) {
-        const key = `${i},${j}`;
-        const list = grid.get(key);
-        if (list) list.push(k);
-        else grid.set(key, [k]);
-      }
-  });
   const ports: Port[] = [];
   const find = (f: number) => ports.find((p) => fracClose(p.f, f, ftol));
   let orbit = 0;
@@ -165,20 +212,10 @@ export function portOrbits(tile: Polygon, isos: Iso[], seeds: number[], maxPorts
     const queue = [s0];
     while (queue.length && ports.length < maxPorts) {
       const f = queue.shift()!;
-      const p = B.at(f);
-      for (let t = 0; t < isos.length; t++) {
-        const w = apply(isos[t]!, p);
-        const list = grid.get(`${Math.floor(w.x / cell)},${Math.floor(w.y / cell)}`) ?? [];
-        for (const u of list) {
-          if (u === t) continue;
-          const b = boxes[u]!;
-          if (w.x < b.minX - eps || w.x > b.maxX + eps || w.y < b.minY - eps || w.y > b.maxY + eps) continue;
-          const q = B.project(apply(inv[u]!, w));
-          if (q.d > eps) continue;
-          if (find(q.f)) continue;
-          ports.push({ f: q.f, orbit, user: false });
-          queue.push(q.f);
-        }
+      for (const q of contacts.partners(f)) {
+        if (find(q)) continue;
+        ports.push({ f: q, orbit, user: false });
+        queue.push(q);
       }
     }
     orbit++;

@@ -41,7 +41,7 @@ Run: `npm run dev` → http://localhost:5173/. Tests: `npm test` (57 passing).
 
 - Envelope mode: "Net only" checkbox draws the unfolded net as a single filled shape (no envelope border, hinges or cut lines on top); SVG tile export follows the view.
 
-- Decorate mode (both tabs): ports closed under the tiling's edge matching (computed from the placed copies, so it handles mirrored hat contacts), connecting Bézier curves perpendicular to the border, brush, swatch/dot, fill, erase, palettes (solid, rainbow, bright, contrast, custom), pattern presets, borders toggle, opposite palette on reflected tiles; undo and share links include the decoration. Tests in test/decor.test.ts.
+- Decorate mode (both tabs): ports closed under the tiling's edge matching (computed from the placed copies, so it handles mirrored hat contacts), connecting Bézier curves perpendicular to the border, brush, swatch/dot, tile fill, region fill (planar arrangement of border + curves + strokes, regions linked across seams through the tiling's contacts; src/decor/regions.ts, test/regions.test.ts), erase, palettes (solid, rainbow, bright, contrast, custom), pattern presets, borders toggle, opposite palette on reflected tiles; undo and share links include the decoration. Tests in test/decor.test.ts.
 - Envelope tiling draws the fold lines inside each tile so the original polygon's orientation is visible.
 
 - Print dialog: one page (Letter, Legal, Tabloid, A5–A2), home margins or 3 mm bleed with TrimBox/BleedBox, tiles-across scale, live preview, vector PDF (own writer, Form XObjects, Flate) and SVG download. Tests build PDFs that pypdf (strict), Ghostscript and Poppler accept.

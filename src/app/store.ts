@@ -4,7 +4,7 @@ import { type Decor } from '../decor/model';
 import { type PaletteId } from '../decor/palette';
 
 export type Tool = 'draw' | 'hinge' | 'erase' | 'pan';
-export type DecorTool = 'port' | 'connect' | 'brush' | 'swatch' | 'erase' | 'pan';
+export type DecorTool = 'port' | 'connect' | 'brush' | 'swatch' | 'fill' | 'erase' | 'pan';
 
 export interface AppState {
   mode: 'envelope' | 'seam';
@@ -40,6 +40,8 @@ export interface AppState {
   opacity: number;
   bend: number;
   palette: PaletteId;
+  /** the fill tool also colours the continuation of a region in neighbouring tiles */
+  linkFill: boolean;
 }
 
 export type Snapshot = Pick<

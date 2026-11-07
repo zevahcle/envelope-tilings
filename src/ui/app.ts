@@ -21,7 +21,8 @@ import { download } from '../render/svgcanvas';
 import { ensureCCW, isSimple, type Polygon } from '../geom/polygon';
 import { type Vec, dist } from '../geom/vec';
 import { cornerIndices } from '../envelope/conway';
-import { type Decor, type Port, emptyDecor, portOrbits, Boundary, sideMidpoints, rng, brushWidth } from '../decor/model';
+import { type Decor, type Port, emptyDecor, portOrbits, Boundary, sideMidpoints, rng, brushWidth, Contacts } from '../decor/model';
+import { Regions } from '../decor/regions';
 import { PALETTES, type PaletteId } from '../decor/palette';
 import { DecorEditor, type DecorContext } from './decorEditor';
 import { type Iso } from '../geom/isometry';
@@ -69,6 +70,7 @@ export function mountApp(root: HTMLElement): void {
     opacity: 1,
     bend: 0.5,
     palette: 'solid',
+    linkFill: true,
   });
   const base0 = first.build(defaultParams(first));
   store.commit(PRESETS[0]!.make(base0), 'Draw a cut on the front sheet of the envelope.');
@@ -184,6 +186,7 @@ export function mountApp(root: HTMLElement): void {
     port: h('button', { class: 'tool', title: 'P' }, ['◉ Add / remove port']),
     brush: h('button', { class: 'tool', title: 'B' }, ['🖌 Brush']),
     swatch: h('button', { class: 'tool', title: 'S' }, ['⬤ Swatch (drag) / dot (click)']),
+    fill: h('button', { class: 'tool', title: 'F' }, ['🪣 Fill region']),
     erase: h('button', { class: 'tool', title: 'E' }, ['⌫ Erase item']),
     pan: h('button', { class: 'tool', title: 'V' }, ['✥ Pan']),
   };
@@ -223,10 +226,13 @@ export function mountApp(root: HTMLElement): void {
   const clearDecorBtn = h('button', { class: 'btn wide' }, ['Clear decoration']);
   const bordersBox = h('input', { type: 'checkbox', 'aria-label': 'Show tile borders' });
   const mirrorBox = h('input', { type: 'checkbox', 'aria-label': 'Different palette on reflected tiles' });
+  const linkFillBox = h('input', { type: 'checkbox', 'aria-label': 'Fill across seams' });
+  linkFillBox.onchange = () => store.set({ linkFill: linkFillBox.checked });
   const mirrorField = h('label', { class: 'field check' }, [mirrorBox, ' Opposite colours on reflected tiles']);
   const decorSidebar = h('div', { class: 'stack' }, [
     h('h2', {}, ['Decorate']),
     h('div', { class: 'stack' }, Object.values(decorTools)),
+    h('label', { class: 'field check', title: 'The fill also colours the pieces in neighbouring tiles that join this region across the tile borders' }, [linkFillBox, ' Fill across seams']),
     h('h2', {}, ['Colour']),
     paletteTabs,
     paletteGrid,
@@ -246,6 +252,7 @@ export function mountApp(root: HTMLElement): void {
     h('div', { class: 'explain' }, [
       h('p', {}, ['Ports are points on the border where curves pass into the next tile. Adding one port adds its partners: the points where neighbouring tiles touch it (dashed rings).']),
       h('p', {}, ['Connect ports in pairs. Curves leave the border at a right angle, so they continue smoothly across tiles. Orange rings are open ends.']),
+      h('p', {}, ['The fill tool colours a region bounded by curves, strokes and the border. “Fill across seams” also colours the pieces that continue it in neighbouring tiles, so a whole cell of the pattern takes the colour.']),
       h('p', {}, ['Everything drawn here repeats in every tile; reflected tiles (the hat) show it mirrored. Untick “Show tile borders” to see the pattern alone.']),
     ]),
   ]);
@@ -394,6 +401,16 @@ export function mountApp(root: HTMLElement): void {
     }
     return portCache;
   }
+  let regionKey = '';
+  let regionCache: Regions | null = null;
+  function regionsFor(frame: DecorFrame, decor: Decor): Regions {
+    const key = frame.key + JSON.stringify([decor.curves, decor.strokes]);
+    if (key !== regionKey || !regionCache) {
+      regionCache = new Regions(frame.tile, decor, frame.isos.length ? new Contacts(frame.tile, frame.isos) : null);
+      regionKey = key;
+    }
+    return regionCache;
+  }
   function applyDecorPreset(id: 'mid' | 'arcs' | 'across' | 'random'): void {
     const s = store.get();
     const frame = decorFrame(s);
@@ -532,9 +549,12 @@ export function mountApp(root: HTMLElement): void {
     const decor = s[decorKey(s)];
     const frame = decorFrame(s);
     const ports = frame ? portsFor(frame, decor) : [];
+    const regions = frame ? regionsFor(frame, decor) : null;
+    const fills = regions ? regions.resolve(decor.fills) : [];
+    linkFillBox.checked = s.linkFill;
     if (s.decorate) {
       editorTitle.textContent = 'Decorate the tile';
-      const ctx: DecorContext | null = frame ? { tile: frame.tile, ports, decor, key: frame.key } : null;
+      const ctx: DecorContext | null = frame && regions ? { tile: frame.tile, ports, decor, regions, fills, key: frame.key } : null;
       decorEditor.render(ctx);
     }
     undoBtn.disabled = !store.canUndo;
@@ -554,7 +574,7 @@ export function mountApp(root: HTMLElement): void {
         base,
         tileKey,
         u.flaps.map((f) => [f.hinge.a, f.hinge.b] as [Vec, Vec]),
-        u.outline ? { tile: u.outline, decor, borders: s.borders } : null,
+        u.outline ? { tile: u.outline, decor, fills, borders: s.borders } : null,
       );
       const tile = tileById(s.tileId);
       const parts = [
@@ -576,7 +596,7 @@ export function mountApp(root: HTMLElement): void {
       const sel = selectedClassOf(s, d.classes);
       renderClassTable(s, d.classes, sel);
       if (!s.decorate) seamEditor.render({ base: d.base, classes: d.classes, deformed: d.tile, curves: s.curves }, d.key, sel?.rep ?? null);
-      seamPreview.render(d.tile, d.placements, d.patch, d.key, { decor, borders: s.borders, mirrorPalette: s.mirrorPalette });
+      seamPreview.render(d.tile, d.placements, d.patch, d.key, { decor, fills, borders: s.borders, mirrorPalette: s.mirrorPalette });
       const free = d.classes.filter((c) => c.verdict === 'free').length;
       const sym = d.classes.filter((c) => c.verdict === 'centrally symmetric' || c.verdict === 'mirror symmetric').length;
       const straight = d.classes.filter((c) => c.verdict === 'straight').length;
@@ -597,7 +617,7 @@ export function mountApp(root: HTMLElement): void {
         `${ports.length} port${ports.length === 1 ? '' : 's'} (${forced} forced)`,
         `${decor.curves.length} curve${decor.curves.length === 1 ? '' : 's'}`,
         `${open} open end${open === 1 ? '' : 's'}`,
-        `${decor.strokes.length + decor.swatches.length} painted`,
+        `${decor.strokes.length + decor.swatches.length + (decor.fills?.length ?? 0)} painted`,
       ];
       const problem = !frame ? 'Unfold a net first: the decoration lives on the net.' : frame.problem;
       status.replaceChildren(
@@ -612,6 +632,8 @@ export function mountApp(root: HTMLElement): void {
   function printSource(): PrintSource | null {
     const s = store.get();
     const decor = s[decorKey(s)];
+    const frame = decorFrame(s);
+    const fills = frame ? regionsFor(frame, decor).resolve(decor.fills) : [];
     const hasArt = !isEmptyDecor(decor);
     const plain = decor.background ?? (hasArt || !s.borders ? DEFAULT_TILE_FILL : null);
     if (s.mode === 'envelope') {
@@ -620,7 +642,7 @@ export function mountApp(root: HTMLElement): void {
       const copies: SourceCopy[] = t.copies
         .filter((k) => !k.overlapping)
         .map((k) => ({ iso: k.iso, reflected: false, fill: plain ?? `hsl(${HUES[k.cls % HUES.length]} 55% 82%)` }));
-      return { tile: u.outline, copies, decor, mirror: false, borders: s.borders, name: tileById(s.tileId).name };
+      return { tile: u.outline, copies, decor, fills, mirror: false, borders: s.borders, name: tileById(s.tileId).name };
     }
     const d = deriveSeam(s);
     if (!d.simple || d.patch.anyOverlap) return null;
@@ -636,6 +658,7 @@ export function mountApp(root: HTMLElement): void {
       patch: aperiodic ? (level: number) => (level > 5 ? null : toCopies(def.patch(params, level))) : undefined,
       startLevel: s.seamLevel,
       decor,
+      fills,
       mirror: s.mirrorPalette,
       borders: s.borders,
       name: def.name,
@@ -736,8 +759,8 @@ export function mountApp(root: HTMLElement): void {
     if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement) return;
     const seam = store.get().mode === 'seam';
     if (store.get().decorate) {
-      const map: Record<string, DecorTool> = { c: 'connect', p: 'port', b: 'brush', s: 'swatch', e: 'erase', v: 'pan' };
-      const t = map[ev.key.toLowerCase()];
+      const map: Record<string, DecorTool> = { c: 'connect', p: 'port', b: 'brush', s: 'swatch', f: 'fill', e: 'erase', v: 'pan' };
+      const t = mod ? undefined : map[ev.key.toLowerCase()];
       if (t) store.set({ decorTool: t });
       if (ev.key === ' ') {
         decorEditor.canvas.spaceHeld = true;

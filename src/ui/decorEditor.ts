@@ -5,11 +5,14 @@ import { SvgCanvas, svgEl, pathOf } from '../render/svgcanvas';
 import { type Store } from '../app/store';
 import { type Decor, type Port, Boundary, hitTest, circlePoints, brushWidth } from '../decor/model';
 import { defineDecor, DEFAULT_TILE_FILL } from '../decor/render';
+import { type Regions, type ResolvedFill } from '../decor/regions';
 
 export interface DecorContext {
   tile: Polygon;
   ports: Port[];
   decor: Decor;
+  regions: Regions;
+  fills: ResolvedFill[];
   /** changes when the tile geometry changes (refit the view) */
   key: string;
 }
@@ -75,7 +78,7 @@ export class DecorEditor {
       this.pendingA = null;
     }
     const defs = svgEl('defs');
-    defineDecor(defs, ctx.tile, ctx.decor, 'decor-edit');
+    defineDecor(defs, ctx.tile, ctx.decor, 'decor-edit', { fills: ctx.fills, seam: c.px(0.8) });
     c.layer('defs').appendChild(defs);
     c.layer('tile').appendChild(svgEl('path', { d: pathOf(ctx.tile), fill: ctx.decor.background ?? DEFAULT_TILE_FILL }));
     c.layer('art').appendChild(svgEl('use', { href: '#decor-edit' }));
@@ -135,6 +138,22 @@ export class DecorEditor {
         const q = port ? this.B.at(port.f) : this.B.at(pr.f);
         o.appendChild(svgEl('circle', { cx: q.x, cy: q.y, r: c.px(7), fill: 'none', stroke: 'var(--accent-2)', 'stroke-width': c.px(1.5) }));
       }
+    }
+    if (tool === 'fill' && this.hover && this.ctx) {
+      const r = this.ctx.regions;
+      const ks = r.covered(r.locate(this.hover), this.store.get().linkFill);
+      if (ks.length)
+        o.appendChild(
+          svgEl('path', {
+            d: r.rings(ks).map((ring) => pathOf(ring)).join(' '),
+            'fill-rule': 'evenodd',
+            fill: this.store.get().color,
+            'fill-opacity': 0.25,
+            stroke: 'var(--accent-2)',
+            'stroke-width': c.px(1.5),
+            'stroke-dasharray': `${c.px(4)} ${c.px(3)}`,
+          }),
+        );
     }
     if ((tool === 'brush' || tool === 'swatch') && this.hover && !this.stroke) {
       const s = this.store.get();
@@ -214,9 +233,34 @@ export class DecorEditor {
         c.svg.setPointerCapture(ev.pointerId);
         return;
       }
+      case 'fill': {
+        const r = this.ctx.regions;
+        const k = r.locate(p);
+        if (k < 0) {
+          this.store.set({ message: 'Click inside the tile to fill a region.' });
+          return;
+        }
+        const covered = new Set(r.covered(k, s.linkFill));
+        // a fill that the new one covers completely is replaced
+        const kept = (d.fills ?? []).filter((f) => !covered.has(r.locate(f.p)) || (f.linked && !s.linkFill));
+        const fill = { p, color: s.color, opacity: s.opacity, linked: s.linkFill };
+        this.onCommit({ ...d, fills: [...kept, fill] }, s.linkFill && covered.size > 1 ? `filled ${covered.size} pieces that join across the seams` : 'region filled');
+        return;
+      }
       case 'erase': {
         const hit = hitTest(this.B, d, p, c.px(6));
-        if (!hit) return;
+        if (!hit) {
+          // topmost fill that colours the region under the pointer
+          const r = this.ctx.regions;
+          const k = r.locate(p);
+          const fills = d.fills ?? [];
+          for (let i = fills.length - 1; i >= 0 && k >= 0; i--)
+            if (r.covered(r.locate(fills[i]!.p), fills[i]!.linked).includes(k)) {
+              this.onCommit({ ...d, fills: fills.filter((_, j) => j !== i) }, 'fill erased');
+              return;
+            }
+          return;
+        }
         if (hit.kind === 'curve') this.onCommit({ ...d, curves: d.curves.filter((_, i) => i !== hit.index) }, 'curve erased');
         else if (hit.kind === 'stroke') this.onCommit({ ...d, strokes: d.strokes.filter((_, i) => i !== hit.index) }, 'stroke erased');
         else this.onCommit({ ...d, swatches: d.swatches.filter((_, i) => i !== hit.index) }, 'swatch erased');

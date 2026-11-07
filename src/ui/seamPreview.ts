@@ -6,9 +6,11 @@ import { toSvgTransform } from '../geom/isometry';
 import { type Decor, isEmptyDecor } from '../decor/model';
 import { defineDecor, DEFAULT_TILE_FILL } from '../decor/render';
 import { alternateColor } from '../decor/palette';
+import { type ResolvedFill } from '../decor/regions';
 
 export interface SeamPreviewDecor {
   decor: Decor;
+  fills: ResolvedFill[];
   borders: boolean;
   mirrorPalette: boolean;
 }
@@ -31,8 +33,8 @@ export class SeamPreview {
     const hasArt = !!deco && !isEmptyDecor(deco.decor);
     const mirror = !!deco?.mirrorPalette;
     if (hasArt) {
-      defineDecor(d, deformed, deco.decor, 'seam-decor');
-      if (mirror) defineDecor(d, deformed, deco.decor, 'seam-decor-alt', { colorMap: alternateColor });
+      defineDecor(d, deformed, deco.decor, 'seam-decor', { fills: deco.fills, seam: c.px(0.8) });
+      if (mirror) defineDecor(d, deformed, deco.decor, 'seam-decor-alt', { colorMap: alternateColor, fills: deco.fills, seam: c.px(0.8) });
     }
     c.layer('defs').appendChild(d);
     if (this.fittedFor !== fitKey) {

@@ -9,6 +9,7 @@ import { type Vec } from '../geom/vec';
 import { type Polygon, bounds } from '../geom/polygon';
 import { toRgb, alternateColor } from '../decor/palette';
 import { Boundary, curvePoints, type Decor } from '../decor/model';
+import { type ResolvedFill } from '../decor/regions';
 import { type PrintLayout } from './layout';
 
 const num = (x: number): string => {
@@ -31,8 +32,15 @@ class Alpha {
   }
 }
 
-function decorOps(tile: Polygon, d: Decor, map: (c: string) => string, alpha: Alpha): string {
-  const out: string[] = ['q', pathOps(tile, true), 'W n', '1 J 1 j'];
+function decorOps(tile: Polygon, d: Decor, fills: ResolvedFill[], seam: number, map: (c: string) => string, alpha: Alpha): string {
+  // fills stay inside the tile by construction; unclipped, their hairline closes seams with the neighbours
+  const out: string[] = ['1 J 1 j'];
+  for (const f of fills) {
+    const c = rgb(map(f.color));
+    const opaque = f.opacity >= 0.999;
+    out.push('q', alpha.gs(f.opacity), `${c} rg ${c} RG ${num(seam)} w`, f.rings.map((r) => pathOps(r, true)).join('\n'), opaque ? 'b*' : 'f*', 'Q');
+  }
+  out.push('q', pathOps(tile, true), 'W n');
   for (const s of d.swatches) out.push('q', alpha.gs(s.opacity), `${rgb(map(s.color))} rg`, pathOps(s.pts, true), 'f', 'Q');
   const B = new Boundary(tile);
   for (const c of d.curves) out.push(`${rgb(map(c.color))} RG`, `${num(c.width)} w`, pathOps(curvePoints(B, c), false), 'S');
@@ -54,8 +62,10 @@ export async function buildPdf(L: PrintLayout): Promise<Uint8Array> {
   const enc = new TextEncoder();
   const alpha = new Alpha();
   const tb = bounds(L.tile);
-  const bbox = [tb.minX, tb.minY, tb.maxX, tb.maxY].map(num).join(' ');
-  const hasArt = L.decor.swatches.length + L.decor.curves.length + L.decor.strokes.length > 0;
+  // padded so the hairlines on the tile edge are not cut by the form's clip
+  const pad = 1 / L.scale;
+  const bbox = [tb.minX - pad, tb.minY - pad, tb.maxX + pad, tb.maxY + pad].map(num).join(' ');
+  const hasArt = L.fills.length + L.decor.swatches.length + L.decor.curves.length + L.decor.strokes.length > 0;
   const mirror = L.mirror && L.tiles.some((t) => t.reflected);
   // hairline of the fill colour hides anti-aliasing seams between tiles
   const seam = 0.3 / L.scale;
@@ -63,8 +73,8 @@ export async function buildPdf(L: PrintLayout): Promise<Uint8Array> {
     { name: 'Ft', ops: `${num(seam)} w 1 j\n${pathOps(L.tile, true)}\nB` },
     { name: 'Fo', ops: `0.169 0.165 0.153 RG ${num(L.borderPt / L.scale)} w 1 j\n${pathOps(L.tile, true)}\nS` },
   ];
-  if (hasArt) forms.push({ name: 'Fd', ops: decorOps(L.tile, L.decor, (c) => c, alpha) });
-  if (hasArt && mirror) forms.push({ name: 'Fa', ops: decorOps(L.tile, L.decor, alternateColor, alpha) });
+  if (hasArt) forms.push({ name: 'Fd', ops: decorOps(L.tile, L.decor, L.fills, seam, (c) => c, alpha) });
+  if (hasArt && mirror) forms.push({ name: 'Fa', ops: decorOps(L.tile, L.decor, L.fills, seam, alternateColor, alpha) });
 
   const cm = (m: PrintLayout['tiles'][number]['m']) => `${num(m.a)} ${num(m.c)} ${num(m.b)} ${num(m.d)} ${num(m.e)} ${num(m.f)} cm`;
   const page: string[] = ['q', `${num(L.art.x)} ${num(L.art.y)} ${num(L.art.w)} ${num(L.art.h)} re W n`];
