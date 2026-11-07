@@ -9,7 +9,12 @@ import { findContacts, gamma, edgeClasses, type EdgeClass, type ContactReport } 
 import { deformedTile, deformedPatch, curvePreset, normaliseCurve, type CurvePresetId, type DeformedPatch } from '../seam/deform';
 import { type Placement } from '../tiles/hat';
 import { EnvelopeEditor } from './editor';
-import { TilingPreview } from './preview';
+import { TilingPreview, HUES } from './preview';
+import { PrintDialog } from './printDialog';
+import { type PrintSource, type SourceCopy } from '../print/layout';
+import { DEFAULT_TILE_FILL } from '../decor/render';
+import { alternateColor } from '../decor/palette';
+import { isEmptyDecor } from '../decor/model';
 import { SeamEditor, classColor } from './seamEditor';
 import { SeamPreview } from './seamPreview';
 import { download } from '../render/svgcanvas';
@@ -78,6 +83,7 @@ export function mountApp(root: HTMLElement): void {
   const exportEditor = h('button', { class: 'btn', title: 'Download the left pane as SVG' }, ['SVG tile']);
   const exportPreview = h('button', { class: 'btn', title: 'Download the tiling as SVG' }, ['SVG tiling']);
   const shareBtn = h('button', { class: 'btn', title: 'Copy a link to this state' }, ['Share']);
+  const printBtn = h('button', { class: 'btn', title: 'Fill a sheet of paper and download a PDF' }, ['🖨 Print']);
   const tabEnvelope = h('button', { class: 'tab active', role: 'tab' }, ['Envelope']);
   const tabSeam = h('button', { class: 'tab', role: 'tab' }, ['Seam']);
   const decorateBtn = h('button', { class: 'btn toggle', title: 'Decorate the tile: curves, colours and swatches' }, ['🎨 Decorate']);
@@ -90,7 +96,7 @@ export function mountApp(root: HTMLElement): void {
     paramBox,
     levelField,
     h('div', { class: 'group' }, [undoBtn, redoBtn]),
-    h('div', { class: 'group' }, [exportEditor, exportPreview, shareBtn]),
+    h('div', { class: 'group' }, [exportEditor, exportPreview, shareBtn, printBtn]),
   ]);
 
   /* ---------- sidebar: envelope ---------- */
@@ -601,6 +607,42 @@ export function mountApp(root: HTMLElement): void {
     }
     scheduleHash();
   });
+
+  /* ---------- print ---------- */
+  function printSource(): PrintSource | null {
+    const s = store.get();
+    const decor = s[decorKey(s)];
+    const hasArt = !isEmptyDecor(decor);
+    const plain = decor.background ?? (hasArt || !s.borders ? DEFAULT_TILE_FILL : null);
+    if (s.mode === 'envelope') {
+      const { u, t } = deriveEnvelope(s);
+      if (!u.outline || !t || !t.tiles) return null;
+      const copies: SourceCopy[] = t.copies
+        .filter((k) => !k.overlapping)
+        .map((k) => ({ iso: k.iso, reflected: false, fill: plain ?? `hsl(${HUES[k.cls % HUES.length]} 55% 82%)` }));
+      return { tile: u.outline, copies, decor, mirror: false, borders: s.borders, name: tileById(s.tileId).name };
+    }
+    const d = deriveSeam(s);
+    if (!d.simple || d.patch.anyOverlap) return null;
+    const def = seamTileById(s.seamTileId);
+    const fill = (reflected: boolean) =>
+      plain ? (reflected && s.mirrorPalette ? alternateColor(plain) : plain) : reflected ? 'hsl(30 60% 78%)' : 'hsl(210 55% 82%)';
+    const toCopies = (ps: Placement[]): SourceCopy[] => ps.map((p) => ({ iso: p.iso, reflected: p.reflected, fill: fill(p.reflected) }));
+    const aperiodic = def.id === 'hat' || def.id === 'spectre';
+    const params = s.seamParams;
+    return {
+      tile: d.tile,
+      copies: toCopies(d.placements),
+      patch: aperiodic ? (level: number) => (level > 5 ? null : toCopies(def.patch(params, level))) : undefined,
+      startLevel: s.seamLevel,
+      decor,
+      mirror: s.mirrorPalette,
+      borders: s.borders,
+      name: def.name,
+    };
+  }
+  const printDialog = new PrintDialog(printSource);
+  printBtn.onclick = () => printDialog.open();
 
   /* ---------- share ---------- */
   function scheduleHash(): void {

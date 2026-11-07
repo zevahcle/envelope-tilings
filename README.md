@@ -26,7 +26,12 @@ your browser; nothing is sent anywhere.
    The presets (side midpoints, arcs around corners, lines across, random pairing) give Truchet-like patterns in one click.
    *Brush*, *Swatch* (drag a shape) or *dot* (click), *Fill tile*, and a palette with Solid, Rainbow, Bright and Contrast sets plus a custom colour.
    Untick **Show tile borders** to see the pattern alone. On the hat, reflected tiles show the art mirrored, and can use opposite colours.
-6. **Share** copies a link that holds the full state; **SVG tile** / **SVG tiling** export the drawings.
+6. **🖨 Print** fills one sheet with the tiling (with its decoration) and downloads a vector PDF or SVG.
+   Paper: US Letter, Legal, Tabloid (11 × 17 in, double letter), A5, A4, A3, A2; portrait or landscape.
+   *Home printer* keeps a white margin (5–20 mm); print at 100 % / "actual size".
+   *Print shop* adds 3 mm bleed on every side and sets the PDF TrimBox and BleedBox, as print shops expect.
+   *Tiles across* sets the scale. Periodic tilings are extended by their translation lattice; the hat and the Spectre use larger substitution patches until the page is covered.
+7. **Share** copies a link that holds the full state; **SVG tile** / **SVG tiling** export the drawings.
 
 A three-page PDF with the mathematical background and checked references for the interested reader:
 [references.pdf](https://zevahcle.github.io/envelope-tilings/references.pdf) (source in `docs/references/`, rebuilt with `node scripts/pdf.mjs docs/references/index.html public/references.pdf`).

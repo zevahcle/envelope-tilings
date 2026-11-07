@@ -6,7 +6,7 @@ import { apply, toSvgTransform } from '../geom/isometry';
 import { type Decor, isEmptyDecor } from '../decor/model';
 import { defineDecor, DEFAULT_TILE_FILL } from '../decor/render';
 
-const HUES = [210, 30, 150, 270, 60, 330, 180, 90, 240, 0, 120, 300];
+export const HUES = [210, 30, 150, 270, 60, 330, 180, 90, 240, 0, 120, 300];
 
 export interface PreviewDecor {
   tile: Polygon;

@@ -1,7 +1,7 @@
 /** Colour sets for the paint panel. */
 export type PaletteId = 'solid' | 'rainbow' | 'bright' | 'contrast';
 
-const hsl = (h: number, s: number, l: number): string => {
+export const hsl = (h: number, s: number, l: number): string => {
   s /= 100;
   l /= 100;
   const k = (n: number) => (n + h / 30) % 12;
@@ -53,3 +53,21 @@ export function alternateColor(hex: string): string {
   if (s < 8) return hsl(0, 0, 100 - l);
   return hsl((h + 180) % 360, s, l);
 }
+
+/** Parse #rrggbb, #rgb or hsl(h s% l%) / hsl(h, s%, l%) into 0..1 RGB. */
+export function toRgb(css: string): [number, number, number] {
+  const c = css.trim();
+  let m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (m) {
+    const n = parseInt(m[1]!, 16);
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  }
+  m = /^#([0-9a-f]{3})$/i.exec(c);
+  if (m) return [...m[1]!].map((d) => parseInt(d + d, 16) / 255) as [number, number, number];
+  const h = /^hsl\(\s*([\d.]+)[ ,]+([\d.]+)%[ ,]+([\d.]+)%\s*\)$/i.exec(c);
+  if (h) return toRgb(hsl(Number(h[1]), Number(h[2]), Number(h[3])));
+  return [0, 0, 0];
+}
+
+export const toHex = (css: string): string =>
+  '#' + toRgb(css).map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');

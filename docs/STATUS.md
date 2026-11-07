@@ -44,6 +44,8 @@ Run: `npm run dev` → http://localhost:5173/. Tests: `npm test` (57 passing).
 - Decorate mode (both tabs): ports closed under the tiling's edge matching (computed from the placed copies, so it handles mirrored hat contacts), connecting Bézier curves perpendicular to the border, brush, swatch/dot, fill, erase, palettes (solid, rainbow, bright, contrast, custom), pattern presets, borders toggle, opposite palette on reflected tiles; undo and share links include the decoration. Tests in test/decor.test.ts.
 - Envelope tiling draws the fold lines inside each tile so the original polygon's orientation is visible.
 
+- Print dialog: one page (Letter, Legal, Tabloid, A5–A2), home margins or 3 mm bleed with TrimBox/BleedBox, tiles-across scale, live preview, vector PDF (own writer, Form XObjects, Flate) and SVG download. Tests build PDFs that pypdf (strict), Ghostscript and Poppler accept.
+
 ## Not yet done
 - Explain stepper / guided tour; gallery of paper figures as preset links.
 - Conway decomposition drawn on the net (break points, half-turn centres).
