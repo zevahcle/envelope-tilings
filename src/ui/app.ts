@@ -14,6 +14,7 @@ import { SeamEditor, classColor } from './seamEditor';
 import { SeamPreview } from './seamPreview';
 import { download } from '../render/svgcanvas';
 import { ensureCCW, isSimple, type Polygon } from '../geom/polygon';
+import { type Vec } from '../geom/vec';
 
 const h = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -316,7 +317,7 @@ export function mountApp(root: HTMLElement): void {
       previewTitle.textContent = t && !t.tiles ? 'Development of the net (overlaps in red)' : 'Tiling by the net';
       const tileKey = s.tileId + JSON.stringify(s.params);
       editor.render(base, u, s.open, tileKey, s.netOnly);
-      preview.render(t, base, tileKey);
+      preview.render(t, base, tileKey, u.flaps.map((f) => [f.hinge.a, f.hinge.b] as [Vec, Vec]));
       const tile = tileById(s.tileId);
       const parts = [
         `${u.pieces.length} flap${u.pieces.length === 1 ? '' : 's'}`,

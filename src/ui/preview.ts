@@ -1,6 +1,8 @@
 import { type Polygon, bounds } from '../geom/polygon';
 import { type NetTiling } from '../envelope/tiling';
 import { SvgCanvas, svgEl, pathOf } from '../render/svgcanvas';
+import { type Vec } from '../geom/vec';
+import { apply } from '../geom/isometry';
 
 const HUES = [210, 30, 150, 270, 60, 330, 180, 90, 240, 0, 120, 300];
 
@@ -9,7 +11,7 @@ export class TilingPreview {
   private fittedFor = '';
 
   constructor(parent: HTMLElement) {
-    this.canvas = new SvgCanvas(parent, ['tiles', 'labels']);
+    this.canvas = new SvgCanvas(parent, ['tiles', 'folds', 'labels']);
     this.canvas.panPredicate = () => true;
     const defs = svgEl('defs');
     const pat = svgEl('pattern', { id: 'hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
@@ -18,9 +20,11 @@ export class TilingPreview {
     this.canvas.svg.insertBefore(defs, this.canvas.svg.firstChild);
   }
 
-  render(tiling: NetTiling | null, base: Polygon, fitKey: string): void {
+  /** `folds`: hinge segments in net coordinates, drawn inside every copy so the original polygon stays visible. */
+  render(tiling: NetTiling | null, base: Polygon, fitKey: string, folds: [Vec, Vec][] = []): void {
     const c = this.canvas;
     const g = c.clear('tiles');
+    const fg = c.clear('folds');
     if (!tiling) return;
     if (this.fittedFor !== fitKey) {
       const near = tiling.copies.filter((k) => k.poly.length).slice(0, 40).flatMap((k) => k.poly);
@@ -40,6 +44,19 @@ export class TilingPreview {
           'fill-opacity': k.overlapping ? 0.5 : 1,
         }),
       );
+      if (k.overlapping) continue;
+      for (const [a, b] of folds) {
+        fg.appendChild(
+          svgEl('path', {
+            d: pathOf([apply(k.iso, a), apply(k.iso, b)], false),
+            stroke: 'var(--ink)',
+            'stroke-width': c.px(0.8),
+            'stroke-dasharray': `${c.px(3)} ${c.px(3)}`,
+            opacity: 0.45,
+            fill: 'none',
+          }),
+        );
+      }
     }
   }
 }

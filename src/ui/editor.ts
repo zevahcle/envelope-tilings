@@ -1,5 +1,5 @@
 import { type Vec, dist, normalize, sub, lerp } from '../geom/vec';
-import { type Iso } from '../geom/isometry';
+import { type Iso, apply, reflection } from '../geom/isometry';
 import { type Polygon, pointInPolygon, bounds } from '../geom/polygon';
 import { nearestSegment, polylinesCross, polylineSelfIntersects } from '../geom/intersect';
 import { smoothStroke } from '../geom/curve';
@@ -44,7 +44,12 @@ export class EnvelopeEditor {
     this.current = u;
     const c = this.canvas;
     if (this.fittedFor !== tileKey) {
+      // every net lies in the polygon plus its mirror images across its edges
       const all = [...base, ...u.flaps.flatMap((f) => f.poly)];
+      for (let i = 0; i < base.length; i++) {
+        const m = reflection(base[i]!, base[(i + 1) % base.length]!);
+        for (const p of base) all.push(apply(m, p));
+      }
       c.fit(bounds(all), 60);
       this.fittedFor = tileKey;
     }
