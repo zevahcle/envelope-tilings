@@ -6,6 +6,7 @@ import { translation, apply } from '../src/geom/isometry';
 import { ensureCCW, bounds } from '../src/geom/polygon';
 import { emptyDecor, type Decor, Contacts } from '../src/decor/model';
 import { Regions } from '../src/decor/regions';
+import { type LayerArt } from '../src/decor/render';
 import { SEAM_TILES } from '../src/seam/library';
 import { findContacts, gamma, edgeClasses } from '../src/seam/contacts';
 import { deformedTile, curvePreset, normaliseCurve } from '../src/seam/deform';
@@ -28,6 +29,10 @@ const decor: Decor = {
   fills: [{ p: { x: 0.05, y: 0.05 }, color: '#f0e442', opacity: 1, linked: true }],
 };
 const squareFills = () => new Regions(square, decor, new Contacts(square, latticeCopies().map((c) => c.iso))).resolve(decor.fills);
+const squareLayers = (): LayerArt[] => [
+  { decor, fills: squareFills(), opacity: 1, blend: 'normal' },
+  { decor: { ...emptyDecor(), curves: [{ a: 0.0625, b: 0.5625, color: '#cc79a7', width: 0.08, bend: 0.4 }] }, fills: [], opacity: 0.6, blend: 'multiply' },
+];
 
 function save(name: string, bytes: Uint8Array) {
   if (!OUT) return;
@@ -43,7 +48,7 @@ describe('print layout', () => {
   });
 
   it('fills a letter page with a square tiling, 8 across', async () => {
-    const src: PrintSource = { tile: square, copies: latticeCopies(), decor, fills: squareFills(), mirror: false, borders: true, name: 'Square' };
+    const src: PrintSource = { tile: square, copies: latticeCopies(), layers: squareLayers(), mirror: false, borders: true, name: 'Square' };
     const L = layoutPage(src, { paper: 'letter', landscape: false, output: 'home', marginMM: 10, tilesAcross: 8, borderPt: 0.5 });
     expect(L.covered).toBe(true);
     expect(L.sizeMM).toBeCloseTo((215.9 - 20) / 8, 3);
@@ -55,18 +60,21 @@ describe('print layout', () => {
     const head = new TextDecoder().decode(pdf.slice(0, 8));
     expect(head).toBe('%PDF-1.4');
     // the band between the two corner arcs joins the neighbours' corner pieces across the seams
-    expect(L.fills.length).toBe(1);
-    expect(L.fills[0]!.rings.length).toBeGreaterThan(1);
+    expect(L.layers[0]!.fills.length).toBe(1);
+    expect(L.layers[0]!.fills[0]!.rings.length).toBeGreaterThan(1);
     // xref offsets point at "n 0 obj"
     const txt = new TextDecoder('latin1').decode(pdf);
     const start = Number(/startxref\n(\d+)/.exec(txt)![1]);
     const entries = txt.slice(start).split('\n').slice(3).filter((l) => / n $/.test(l));
     entries.forEach((e, i) => expect(txt.slice(Number(e.slice(0, 10)), Number(e.slice(0, 10)) + 10)).toMatch(new RegExp(`^${i + 1} 0 obj`)));
+    // each layer is a transparency group; the second one is drawn at 60 % with multiply
+    expect(txt.match(/\/Group << \/S \/Transparency >>/g)?.length).toBe(2);
+    expect(txt).toContain('/ca 0.6 /CA 0.6 /BM /Multiply');
     save('square-letter', pdf);
   });
 
   it('pro output adds 3 mm bleed and a trim box', async () => {
-    const src: PrintSource = { tile: square, copies: latticeCopies(), decor: emptyDecor(), fills: [], mirror: false, borders: false, name: 'Square' };
+    const src: PrintSource = { tile: square, copies: latticeCopies(), layers: [], mirror: false, borders: false, name: 'Square' };
     const L = layoutPage(src, { paper: 'a4', landscape: true, output: 'pro', marginMM: 10, tilesAcross: 10, borderPt: 0.5 });
     expect(L.pageW / PT_PER_MM).toBeCloseTo(297 + 6, 3);
     expect(L.pageH / PT_PER_MM).toBeCloseTo(210 + 6, 3);
@@ -91,8 +99,7 @@ describe('print layout', () => {
         copies: placements.map((p) => ({ iso: p.iso, reflected: p.reflected, fill: fill(p.reflected) })),
         patch: (l) => (l > 5 ? null : def.patch(params, l).map((p) => ({ iso: p.iso, reflected: p.reflected, fill: fill(p.reflected) }))),
         startLevel: def.defaultLevel,
-        decor: emptyDecor(),
-        fills: [],
+        layers: [],
         mirror: false,
         borders: true,
         name: def.name,

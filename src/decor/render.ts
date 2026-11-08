@@ -2,6 +2,8 @@ import { type Polygon, bounds } from '../geom/polygon';
 import { svgEl, pathOf } from '../render/svgcanvas';
 import { type Decor, Boundary, curvePoints } from './model';
 import { type ResolvedFill } from './regions';
+import { type BlendMode } from './layers';
+import { alternateColor } from './palette';
 
 export const DEFAULT_TILE_FILL = '#fbf8f1';
 
@@ -75,4 +77,29 @@ export function defineDecor(
       }),
     );
   defs.appendChild(outer);
+}
+
+/** One layer ready to draw: its decoration, resolved fills and compositing. */
+export interface LayerArt {
+  decor: Decor;
+  fills: ResolvedFill[];
+  opacity: number;
+  blend: BlendMode;
+}
+
+/** Define every layer as `${prefix}-k` (and `${prefix}-k-alt` with the opposite palette when `alt`). */
+export function defineLayers(defs: SVGElement, tile: Polygon, layers: LayerArt[], prefix: string, opts: { alt?: boolean; seam?: number } = {}): void {
+  layers.forEach((l, k) => {
+    defineDecor(defs, tile, l.decor, `${prefix}-${k}`, { fills: l.fills, seam: opts.seam });
+    if (opts.alt) defineDecor(defs, tile, l.decor, `${prefix}-${k}-alt`, { colorMap: alternateColor, fills: l.fills, seam: opts.seam });
+  });
+}
+
+/** A placed copy of layer k; opacity and blend mode apply to the layer as a whole. */
+export function useLayer(prefix: string, k: number, l: LayerArt, transform: string | null, alt = false): SVGUseElement {
+  const attrs: Record<string, string | number> = { href: `#${prefix}-${k}${alt ? '-alt' : ''}` };
+  if (transform) attrs.transform = transform;
+  if (l.opacity < 1) attrs.opacity = l.opacity;
+  if (l.blend !== 'normal') attrs.style = `mix-blend-mode:${l.blend}`;
+  return svgEl('use', attrs);
 }

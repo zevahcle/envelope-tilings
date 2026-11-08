@@ -3,14 +3,12 @@ import { type Placement } from '../tiles/hat';
 import { type DeformedPatch } from '../seam/deform';
 import { SvgCanvas, svgEl, pathOf } from '../render/svgcanvas';
 import { toSvgTransform } from '../geom/isometry';
-import { type Decor, isEmptyDecor } from '../decor/model';
-import { defineDecor, DEFAULT_TILE_FILL } from '../decor/render';
+import { defineLayers, useLayer, DEFAULT_TILE_FILL, type LayerArt } from '../decor/render';
 import { alternateColor } from '../decor/palette';
-import { type ResolvedFill } from '../decor/regions';
 
 export interface SeamPreviewDecor {
-  decor: Decor;
-  fills: ResolvedFill[];
+  layers: LayerArt[];
+  background: string | null;
   borders: boolean;
   mirrorPalette: boolean;
 }
@@ -30,12 +28,10 @@ export class SeamPreview {
     const d = svgEl('defs');
     d.appendChild(svgEl('path', { id: 'seam-shape', d: pathOf(deformed) }));
     const borders = deco ? deco.borders : true;
-    const hasArt = !!deco && !isEmptyDecor(deco.decor);
+    const layers = deco?.layers ?? [];
+    const hasArt = layers.length > 0;
     const mirror = !!deco?.mirrorPalette;
-    if (hasArt) {
-      defineDecor(d, deformed, deco.decor, 'seam-decor', { fills: deco.fills, seam: c.px(0.8) });
-      if (mirror) defineDecor(d, deformed, deco.decor, 'seam-decor-alt', { colorMap: alternateColor, fills: deco.fills, seam: c.px(0.8) });
-    }
+    defineLayers(d, deformed, layers, 'seam-layer', { alt: mirror, seam: c.px(0.8) });
     c.layer('defs').appendChild(d);
     if (this.fittedFor !== fitKey) {
       const n = Math.min(placements.length, 60);
@@ -43,7 +39,7 @@ export class SeamPreview {
       c.fit(bounds(pts.length ? pts : deformed), 20);
       this.fittedFor = fitKey;
     }
-    const bg = deco?.decor.background ?? (hasArt || !borders ? DEFAULT_TILE_FILL : null);
+    const bg = deco?.background ?? (hasArt || !borders ? DEFAULT_TILE_FILL : null);
     placements.forEach((p, k) => {
       const over = patch.overlapping[k];
       const transform = toSvgTransform(p.iso);
@@ -67,7 +63,7 @@ export class SeamPreview {
           'stroke-width': c.px(0.8),
         }),
       );
-      if (hasArt && !over) c.layer('art').appendChild(svgEl('use', { href: p.reflected && mirror ? '#seam-decor-alt' : '#seam-decor', transform }));
+      if (!over) layers.forEach((l, i) => c.layer('art').appendChild(useLayer('seam-layer', i, l, transform, p.reflected && mirror)));
       if (borders || over)
         c.layer('lines').appendChild(
           svgEl('use', {

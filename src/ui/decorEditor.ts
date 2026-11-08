@@ -4,15 +4,19 @@ import { smoothStroke, polylineLength } from '../geom/curve';
 import { SvgCanvas, svgEl, pathOf } from '../render/svgcanvas';
 import { type Store } from '../app/store';
 import { type Decor, type Port, Boundary, hitTest, circlePoints, brushWidth } from '../decor/model';
-import { defineDecor, DEFAULT_TILE_FILL } from '../decor/render';
-import { type Regions, type ResolvedFill } from '../decor/regions';
+import { defineLayers, useLayer, DEFAULT_TILE_FILL, type LayerArt } from '../decor/render';
+import { type Regions } from '../decor/regions';
 
 export interface DecorContext {
   tile: Polygon;
   ports: Port[];
+  /** decoration of the active layer, which the tools edit */
   decor: Decor;
+  /** regions of the active layer, for the fill tool */
   regions: Regions;
-  fills: ResolvedFill[];
+  /** all visible layers, bottom first, as they are drawn */
+  layers: LayerArt[];
+  background: string | null;
   /** changes when the tile geometry changes (refit the view) */
   key: string;
 }
@@ -78,10 +82,10 @@ export class DecorEditor {
       this.pendingA = null;
     }
     const defs = svgEl('defs');
-    defineDecor(defs, ctx.tile, ctx.decor, 'decor-edit', { fills: ctx.fills, seam: c.px(0.8) });
+    defineLayers(defs, ctx.tile, ctx.layers, 'edit-layer', { seam: c.px(0.8) });
     c.layer('defs').appendChild(defs);
-    c.layer('tile').appendChild(svgEl('path', { d: pathOf(ctx.tile), fill: ctx.decor.background ?? DEFAULT_TILE_FILL }));
-    c.layer('art').appendChild(svgEl('use', { href: '#decor-edit' }));
+    c.layer('tile').appendChild(svgEl('path', { d: pathOf(ctx.tile), fill: ctx.background ?? DEFAULT_TILE_FILL }));
+    ctx.layers.forEach((l, k) => c.layer('art').appendChild(useLayer('edit-layer', k, l, null)));
     c.layer('outline').appendChild(
       svgEl('path', { d: pathOf(ctx.tile), fill: 'none', stroke: 'var(--ink)', 'stroke-width': c.px(1.5), 'stroke-linejoin': 'round' }),
     );

@@ -9,6 +9,7 @@ import { type Vec } from '../geom/vec';
 import { type Polygon, bounds } from '../geom/polygon';
 import { toRgb, alternateColor } from '../decor/palette';
 import { Boundary, curvePoints, type Decor } from '../decor/model';
+import { pdfBlend, type BlendMode } from '../decor/layers';
 import { type ResolvedFill } from '../decor/regions';
 import { type PrintLayout } from './layout';
 
@@ -20,15 +21,21 @@ const rgb = (css: string) => toRgb(css).map(num).join(' ');
 const pathOps = (pts: Vec[], closed: boolean): string =>
   pts.map((p, i) => `${num(p.x)} ${num(p.y)} ${i ? 'l' : 'm'}`).join('\n') + (closed ? '\nh' : '');
 
+/** ExtGState resources: constant alpha, and a blend mode for whole layers. */
 class Alpha {
   readonly map = new Map<string, string>();
-  gs(a: number): string {
-    const k = num(Math.max(0, Math.min(1, a)));
+  gs(a: number, blend: BlendMode = 'normal'): string {
+    const k = `${num(Math.max(0, Math.min(1, a)))} ${pdfBlend(blend)}`;
     if (!this.map.has(k)) this.map.set(k, `GA${this.map.size}`);
     return `/${this.map.get(k)} gs`;
   }
   dict(): string {
-    return [...this.map].map(([a, n]) => `/${n} << /Type /ExtGState /ca ${a} /CA ${a} >>`).join(' ');
+    return [...this.map]
+      .map(([k, n]) => {
+        const [a, bm] = k.split(' ');
+        return `/${n} << /Type /ExtGState /ca ${a} /CA ${a} /BM /${bm} >>`;
+      })
+      .join(' ');
   }
 }
 
@@ -65,16 +72,18 @@ export async function buildPdf(L: PrintLayout): Promise<Uint8Array> {
   // padded so the hairlines on the tile edge are not cut by the form's clip
   const pad = 1 / L.scale;
   const bbox = [tb.minX - pad, tb.minY - pad, tb.maxX + pad, tb.maxY + pad].map(num).join(' ');
-  const hasArt = L.fills.length + L.decor.swatches.length + L.decor.curves.length + L.decor.strokes.length > 0;
   const mirror = L.mirror && L.tiles.some((t) => t.reflected);
   // hairline of the fill colour hides anti-aliasing seams between tiles
   const seam = 0.3 / L.scale;
-  const forms: { name: string; ops: string }[] = [
+  const forms: { name: string; ops: string; group?: boolean }[] = [
     { name: 'Ft', ops: `${num(seam)} w 1 j\n${pathOps(L.tile, true)}\nB` },
     { name: 'Fo', ops: `0.169 0.165 0.153 RG ${num(L.borderPt / L.scale)} w 1 j\n${pathOps(L.tile, true)}\nS` },
   ];
-  if (hasArt) forms.push({ name: 'Fd', ops: decorOps(L.tile, L.decor, L.fills, seam, (c) => c, alpha) });
-  if (hasArt && mirror) forms.push({ name: 'Fa', ops: decorOps(L.tile, L.decor, L.fills, seam, alternateColor, alpha) });
+  // one transparency group per layer, so its opacity and blend mode apply to the layer as a whole
+  L.layers.forEach((l, k) => {
+    forms.push({ name: `Fd${k}`, ops: decorOps(L.tile, l.decor, l.fills, seam, (c) => c, alpha), group: true });
+    if (mirror) forms.push({ name: `Fa${k}`, ops: decorOps(L.tile, l.decor, l.fills, seam, alternateColor, alpha), group: true });
+  });
 
   const cm = (m: PrintLayout['tiles'][number]['m']) => `${num(m.a)} ${num(m.c)} ${num(m.b)} ${num(m.d)} ${num(m.e)} ${num(m.f)} cm`;
   const page: string[] = ['q', `${num(L.art.x)} ${num(L.art.y)} ${num(L.art.w)} ${num(L.art.h)} re W n`];
@@ -82,7 +91,10 @@ export async function buildPdf(L: PrintLayout): Promise<Uint8Array> {
     const c = rgb(t.fill);
     page.push(`q ${c} rg ${c} RG ${cm(t.m)} /Ft Do Q`);
   }
-  if (hasArt) for (const t of L.tiles) page.push(`q ${cm(t.m)} /${t.reflected && mirror ? 'Fa' : 'Fd'} Do Q`);
+  L.layers.forEach((l, k) => {
+    const gs = l.opacity < 1 || l.blend !== 'normal' ? `${alpha.gs(l.opacity, l.blend)} ` : '';
+    for (const t of L.tiles) page.push(`q ${gs}${cm(t.m)} /${t.reflected && mirror ? 'Fa' : 'Fd'}${k} Do Q`);
+  });
   if (L.borders) for (const t of L.tiles) page.push(`q ${cm(t.m)} /Fo Do Q`);
   page.push('Q');
 
@@ -124,7 +136,7 @@ export async function buildPdf(L: PrintLayout): Promise<Uint8Array> {
   obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox ${r(0, 0, L.pageW, L.pageH)}${boxes} /Resources ${res} /Contents 4 0 R >>`);
   await stream(4, '', page.join('\n'));
   for (let i = 0; i < forms.length; i++)
-    await stream(formIds[i]!, `/Type /XObject /Subtype /Form /BBox [${bbox}]${gsDict ? ` /Resources << /ExtGState << ${gsDict} >> >>` : ''}`, formBodies[i]!);
+    await stream(formIds[i]!, `/Type /XObject /Subtype /Form /BBox [${bbox}]${forms[i]!.group ? ' /Group << /S /Transparency >>' : ''}${gsDict ? ` /Resources << /ExtGState << ${gsDict} >> >>` : ''}`, formBodies[i]!);
   const title = L.name.replace(/[()\\]/g, '');
   obj(infoId, `<< /Title (Envelope Tilings - ${title}) /Creator (Envelope Tilings, zevahcle.github.io/envelope-tilings) /Producer (Envelope Tilings) >>`);
 

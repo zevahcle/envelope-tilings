@@ -1,6 +1,6 @@
 import { type Cut, type HingeSpec } from '../envelope/model';
 import { type SeamCurves } from '../seam/deform';
-import { type Decor } from '../decor/model';
+import { type DecorDoc } from '../decor/layers';
 import { type PaletteId } from '../decor/palette';
 
 export type Tool = 'draw' | 'hinge' | 'erase' | 'pan';
@@ -27,8 +27,8 @@ export interface AppState {
   selectedClass: number | null;
   /* decoration (both modes) */
   decorate: boolean;
-  decorEnv: Decor;
-  decorSeam: Decor;
+  decorEnv: DecorDoc;
+  decorSeam: DecorDoc;
   /** draw tile outlines in the tiling */
   borders: boolean;
   /** reflected tiles use the opposite-hue palette */

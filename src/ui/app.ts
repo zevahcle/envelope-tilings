@@ -12,9 +12,11 @@ import { EnvelopeEditor } from './editor';
 import { TilingPreview, HUES } from './preview';
 import { PrintDialog } from './printDialog';
 import { type PrintSource, type SourceCopy } from '../print/layout';
-import { DEFAULT_TILE_FILL } from '../decor/render';
+import { DEFAULT_TILE_FILL, type LayerArt } from '../decor/render';
 import { alternateColor } from '../decor/palette';
-import { isEmptyDecor } from '../decor/model';
+import { type DecorDoc, emptyDoc, isEmptyDoc, shownLayers, activeLayer, setActiveDecor } from '../decor/layers';
+import { LayersPanel } from './layersPanel';
+import { designJson, parseDesign, normaliseSnapshot } from '../app/designFile';
 import { SeamEditor, classColor } from './seamEditor';
 import { SeamPreview } from './seamPreview';
 import { download } from '../render/svgcanvas';
@@ -60,8 +62,8 @@ export function mountApp(root: HTMLElement): void {
     curves: {},
     selectedClass: null,
     decorate: false,
-    decorEnv: emptyDecor(),
-    decorSeam: emptyDecor(),
+    decorEnv: emptyDoc(),
+    decorSeam: emptyDoc(),
     borders: true,
     mirrorPalette: false,
     decorTool: 'connect',
@@ -86,6 +88,9 @@ export function mountApp(root: HTMLElement): void {
   const exportPreview = h('button', { class: 'btn', title: 'Download the tiling as SVG' }, ['SVG tiling']);
   const shareBtn = h('button', { class: 'btn', title: 'Copy a link to this state' }, ['Share']);
   const printBtn = h('button', { class: 'btn', title: 'Fill a sheet of paper and download a PDF' }, ['🖨 Print']);
+  const saveBtn = h('button', { class: 'btn', title: 'Download the design (tile, cuts, curves, all layers) to open and edit later' }, ['💾 Save']);
+  const openBtn = h('button', { class: 'btn', title: 'Open a design saved with Save' }, ['📂 Open']);
+  const openInput = h('input', { type: 'file', accept: '.json,.etd.json,application/json', style: 'display:none' });
   const tabEnvelope = h('button', { class: 'tab active', role: 'tab' }, ['Envelope']);
   const tabSeam = h('button', { class: 'tab', role: 'tab' }, ['Seam']);
   const decorateBtn = h('button', { class: 'btn toggle', title: 'Decorate the tile: curves, colours and swatches' }, ['🎨 Decorate']);
@@ -98,6 +103,7 @@ export function mountApp(root: HTMLElement): void {
     paramBox,
     levelField,
     h('div', { class: 'group' }, [undoBtn, redoBtn]),
+    h('div', { class: 'group' }, [saveBtn, openBtn, openInput]),
     h('div', { class: 'group' }, [exportEditor, exportPreview, shareBtn, printBtn]),
   ]);
 
@@ -223,16 +229,22 @@ export function mountApp(root: HTMLElement): void {
     b.onclick = () => applyDecorPreset(p.id);
     decorPresetBox.append(b);
   }
-  const clearDecorBtn = h('button', { class: 'btn wide' }, ['Clear decoration']);
+  const clearDecorBtn = h('button', { class: 'btn wide' }, ['Clear layer']);
   const bordersBox = h('input', { type: 'checkbox', 'aria-label': 'Show tile borders' });
   const mirrorBox = h('input', { type: 'checkbox', 'aria-label': 'Different palette on reflected tiles' });
   const linkFillBox = h('input', { type: 'checkbox', 'aria-label': 'Fill across seams' });
   linkFillBox.onchange = () => store.set({ linkFill: linkFillBox.checked });
   const mirrorField = h('label', { class: 'field check' }, [mirrorBox, ' Opposite colours on reflected tiles']);
+  const layersPanel = new LayersPanel(
+    (d, message) => commitDoc(d, message),
+    (d) => store.set({ [decorKey(store.get())]: d } as Partial<AppState>),
+  );
   const decorSidebar = h('div', { class: 'stack' }, [
     h('h2', {}, ['Decorate']),
     h('div', { class: 'stack' }, Object.values(decorTools)),
     h('label', { class: 'field check', title: 'The fill also colours the pieces in neighbouring tiles that join this region across the tile borders' }, [linkFillBox, ' Fill across seams']),
+    h('h2', {}, ['Layers']),
+    layersPanel.el,
     h('h2', {}, ['Colour']),
     paletteTabs,
     paletteGrid,
@@ -253,6 +265,7 @@ export function mountApp(root: HTMLElement): void {
       h('p', {}, ['Ports are points on the border where curves pass into the next tile. Adding one port adds its partners: the points where neighbouring tiles touch it (dashed rings).']),
       h('p', {}, ['Connect ports in pairs. Curves leave the border at a right angle, so they continue smoothly across tiles. Orange rings are open ends.']),
       h('p', {}, ['The fill tool colours a region bounded by curves, strokes and the border. “Fill across seams” also colours the pieces that continue it in neighbouring tiles, so a whole cell of the pattern takes the colour.']),
+      h('p', {}, ['Layers stack like in a paint program: the tools draw on the selected layer, and each layer has its own opacity and blend mode (multiply, screen, dodge, difference, …). A preset on a new layer gives a second pattern over the first.']),
       h('p', {}, ['Everything drawn here repeats in every tile; reflected tiles (the hat) show it mirrored. Untick “Show tile borders” to see the pattern alone.']),
     ]),
   ]);
@@ -275,7 +288,10 @@ export function mountApp(root: HTMLElement): void {
   const seamEditor = new SeamEditor(seamEditorBox, store);
   const seamPreview = new SeamPreview(seamPreviewBox);
   const decorKey = (s: AppState) => (s.mode === 'envelope' ? 'decorEnv' : 'decorSeam') as 'decorEnv' | 'decorSeam';
-  const commitDecor = (d: Decor, message: string) => store.commit({ [decorKey(store.get())]: d } as Partial<Snapshot>, message);
+  const docOf = (s: AppState): DecorDoc => s[decorKey(s)];
+  const activeDecor = (s: AppState): Decor => activeLayer(docOf(s)).decor;
+  const commitDoc = (d: DecorDoc, message: string) => store.commit({ [decorKey(store.get())]: d } as Partial<Snapshot>, message);
+  const commitDecor = (d: Decor, message: string) => commitDoc(setActiveDecor(docOf(store.get()), d), message);
   const decorEditor = new DecorEditor(decorEditorBox, store, commitDecor);
 
   /* ---------- derived: envelope ---------- */
@@ -401,15 +417,31 @@ export function mountApp(root: HTMLElement): void {
     }
     return portCache;
   }
-  let regionKey = '';
-  let regionCache: Regions | null = null;
+  const regionCache = new Map<string, Regions>();
+  let contactKey = '';
+  let contactCache: Contacts | null = null;
   function regionsFor(frame: DecorFrame, decor: Decor): Regions {
     const key = frame.key + JSON.stringify([decor.curves, decor.strokes]);
-    if (key !== regionKey || !regionCache) {
-      regionCache = new Regions(frame.tile, decor, frame.isos.length ? new Contacts(frame.tile, frame.isos) : null);
-      regionKey = key;
+    let r = regionCache.get(key);
+    if (!r) {
+      if (contactKey !== frame.key) {
+        contactCache = frame.isos.length ? new Contacts(frame.tile, frame.isos) : null;
+        contactKey = frame.key;
+      }
+      r = new Regions(frame.tile, decor, contactCache);
+      if (regionCache.size > 40) regionCache.clear();
+      regionCache.set(key, r);
     }
-    return regionCache;
+    return r;
+  }
+  /** visible layers with their fills resolved, bottom first */
+  function layerArt(frame: DecorFrame | null, doc: DecorDoc): LayerArt[] {
+    return shownLayers(doc).map((l) => ({
+      decor: l.decor,
+      fills: frame ? regionsFor(frame, l.decor).resolve(l.decor.fills) : [],
+      opacity: l.opacity,
+      blend: l.blend,
+    }));
   }
   function applyDecorPreset(id: 'mid' | 'arcs' | 'across' | 'random'): void {
     const s = store.get();
@@ -418,7 +450,7 @@ export function mountApp(root: HTMLElement): void {
       store.set({ message: 'Unfold a net that tiles first.' });
       return;
     }
-    const decor = s[decorKey(s)];
+    const decor = activeDecor(s);
     const B = new Boundary(frame.tile);
     const mids = sideMidpoints(B, frame.corners);
     if (id === 'mid') {
@@ -444,19 +476,19 @@ export function mountApp(root: HTMLElement): void {
   }
   function recolorCurves(): void {
     const s = store.get();
-    const decor = s[decorKey(s)];
+    const decor = activeDecor(s);
     const cols = PALETTES[s.palette].colors.filter((c) => c !== '#ffffff');
     commitDecor({ ...decor, curves: decor.curves.map((c, i) => ({ ...c, color: cols[i % cols.length]! })) }, 'curves recoloured');
   }
   recolorBtn.onclick = recolorCurves;
-  clearDecorBtn.onclick = () => commitDecor(emptyDecor(), 'decoration cleared');
+  clearDecorBtn.onclick = () => commitDecor(emptyDecor(), 'layer cleared');
   fillBtn.onclick = () => {
     const s = store.get();
-    commitDecor({ ...s[decorKey(s)], background: s.color }, 'tile filled');
+    commitDoc({ ...docOf(s), background: s.color }, 'tile filled');
   };
   noFillBtn.onclick = () => {
     const s = store.get();
-    commitDecor({ ...s[decorKey(s)], background: null }, 'tile fill removed');
+    commitDoc({ ...docOf(s), background: null }, 'tile fill removed');
   };
   bordersBox.onchange = () => store.commit({ borders: bordersBox.checked }, bordersBox.checked ? 'borders shown' : 'borders hidden');
   mirrorBox.onchange = () => store.commit({ mirrorPalette: mirrorBox.checked });
@@ -546,15 +578,17 @@ export function mountApp(root: HTMLElement): void {
     opacitySlider.value = String(s.opacity);
     bendSlider.value = String(s.bend);
     renderPalette(s);
-    const decor = s[decorKey(s)];
+    const doc = docOf(s);
+    const decor = activeDecor(s);
     const frame = decorFrame(s);
     const ports = frame ? portsFor(frame, decor) : [];
     const regions = frame ? regionsFor(frame, decor) : null;
-    const fills = regions ? regions.resolve(decor.fills) : [];
+    const layers = layerArt(frame, doc);
     linkFillBox.checked = s.linkFill;
+    layersPanel.render(doc);
     if (s.decorate) {
-      editorTitle.textContent = 'Decorate the tile';
-      const ctx: DecorContext | null = frame && regions ? { tile: frame.tile, ports, decor, regions, fills, key: frame.key } : null;
+      editorTitle.textContent = `Decorate the tile · ${activeLayer(doc).name}`;
+      const ctx: DecorContext | null = frame && regions ? { tile: frame.tile, ports, decor, regions, layers, background: doc.background, key: frame.key } : null;
       decorEditor.render(ctx);
     }
     undoBtn.disabled = !store.canUndo;
@@ -574,7 +608,7 @@ export function mountApp(root: HTMLElement): void {
         base,
         tileKey,
         u.flaps.map((f) => [f.hinge.a, f.hinge.b] as [Vec, Vec]),
-        u.outline ? { tile: u.outline, decor, fills, borders: s.borders } : null,
+        u.outline ? { tile: u.outline, layers, background: doc.background, borders: s.borders } : null,
       );
       const tile = tileById(s.tileId);
       const parts = [
@@ -596,7 +630,7 @@ export function mountApp(root: HTMLElement): void {
       const sel = selectedClassOf(s, d.classes);
       renderClassTable(s, d.classes, sel);
       if (!s.decorate) seamEditor.render({ base: d.base, classes: d.classes, deformed: d.tile, curves: s.curves }, d.key, sel?.rep ?? null);
-      seamPreview.render(d.tile, d.placements, d.patch, d.key, { decor, fills, borders: s.borders, mirrorPalette: s.mirrorPalette });
+      seamPreview.render(d.tile, d.placements, d.patch, d.key, { layers, background: doc.background, borders: s.borders, mirrorPalette: s.mirrorPalette });
       const free = d.classes.filter((c) => c.verdict === 'free').length;
       const sym = d.classes.filter((c) => c.verdict === 'centrally symmetric' || c.verdict === 'mirror symmetric').length;
       const straight = d.classes.filter((c) => c.verdict === 'straight').length;
@@ -631,18 +665,17 @@ export function mountApp(root: HTMLElement): void {
   /* ---------- print ---------- */
   function printSource(): PrintSource | null {
     const s = store.get();
-    const decor = s[decorKey(s)];
-    const frame = decorFrame(s);
-    const fills = frame ? regionsFor(frame, decor).resolve(decor.fills) : [];
-    const hasArt = !isEmptyDecor(decor);
-    const plain = decor.background ?? (hasArt || !s.borders ? DEFAULT_TILE_FILL : null);
+    const doc = docOf(s);
+    const layers = layerArt(decorFrame(s), doc);
+    const hasArt = !isEmptyDoc(doc);
+    const plain = doc.background ?? (hasArt || !s.borders ? DEFAULT_TILE_FILL : null);
     if (s.mode === 'envelope') {
       const { u, t } = deriveEnvelope(s);
       if (!u.outline || !t || !t.tiles) return null;
       const copies: SourceCopy[] = t.copies
         .filter((k) => !k.overlapping)
         .map((k) => ({ iso: k.iso, reflected: false, fill: plain ?? `hsl(${HUES[k.cls % HUES.length]} 55% 82%)` }));
-      return { tile: u.outline, copies, decor, fills, mirror: false, borders: s.borders, name: tileById(s.tileId).name };
+      return { tile: u.outline, copies, layers, mirror: false, borders: s.borders, name: tileById(s.tileId).name };
     }
     const d = deriveSeam(s);
     if (!d.simple || d.patch.anyOverlap) return null;
@@ -657,8 +690,7 @@ export function mountApp(root: HTMLElement): void {
       copies: toCopies(d.placements),
       patch: aperiodic ? (level: number) => (level > 5 ? null : toCopies(def.patch(params, level))) : undefined,
       startLevel: s.seamLevel,
-      decor,
-      fills,
+      layers,
       mirror: s.mirrorPalette,
       borders: s.borders,
       name: def.name,
@@ -679,7 +711,7 @@ export function mountApp(root: HTMLElement): void {
     const hash = readHash();
     if (hash) {
       const st = await decodeState<Partial<Snapshot>>(hash);
-      if (st) store.commit(st, 'state loaded from link');
+      if (st) store.commit(normaliseSnapshot(st), 'state loaded from link');
     }
     hashReady = true;
   })();
@@ -690,6 +722,26 @@ export function mountApp(root: HTMLElement): void {
       store.set({ message: 'Link copied to the clipboard.' });
     } catch {
       store.set({ message: 'Link is in the address bar.' });
+    }
+  };
+
+  /* ---------- design files ---------- */
+  saveBtn.onclick = () => {
+    const s = store.get();
+    const name = (s.mode === 'envelope' ? tileById(s.tileId).name : seamTileById(s.seamTileId).name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    download(`${name || 'design'}.etd.json`, designJson(snapshot(s)), 'application/json');
+    store.set({ message: 'Design saved. Open it later with 📂 Open.' });
+  };
+  openBtn.onclick = () => openInput.click();
+  openInput.onchange = async () => {
+    const file = openInput.files?.[0];
+    openInput.value = '';
+    if (!file) return;
+    try {
+      store.commit(parseDesign(await file.text()), `opened ${file.name}`);
+      store.set({ selectedClass: null });
+    } catch (e) {
+      store.set({ message: (e as Error).message });
     }
   };
 

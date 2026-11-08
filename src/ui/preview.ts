@@ -3,16 +3,15 @@ import { type NetTiling } from '../envelope/tiling';
 import { SvgCanvas, svgEl, pathOf } from '../render/svgcanvas';
 import { type Vec } from '../geom/vec';
 import { apply, toSvgTransform } from '../geom/isometry';
-import { type Decor, isEmptyDecor } from '../decor/model';
-import { defineDecor, DEFAULT_TILE_FILL } from '../decor/render';
-import { type ResolvedFill } from '../decor/regions';
+import { defineLayers, useLayer, DEFAULT_TILE_FILL, type LayerArt } from '../decor/render';
 
 export const HUES = [210, 30, 150, 270, 60, 330, 180, 90, 240, 0, 120, 300];
 
 export interface PreviewDecor {
   tile: Polygon;
-  decor: Decor;
-  fills: ResolvedFill[];
+  /** visible layers, bottom first */
+  layers: LayerArt[];
+  background: string | null;
   borders: boolean;
 }
 
@@ -41,13 +40,14 @@ export class TilingPreview {
       this.fittedFor = fitKey;
     }
     const borders = deco ? deco.borders : true;
-    const hasArt = !!deco && !isEmptyDecor(deco.decor);
+    const layers = deco?.layers ?? [];
+    const hasArt = layers.length > 0;
     if (hasArt) {
       const defs = svgEl('defs');
-      defineDecor(defs, deco.tile, deco.decor, 'env-decor', { fills: deco.fills, seam: c.px(0.8) });
+      defineLayers(defs, deco!.tile, layers, 'env-layer', { seam: c.px(0.8) });
       c.layer('defs').appendChild(defs);
     }
-    const plain = deco?.decor.background ?? (hasArt || !borders ? DEFAULT_TILE_FILL : null);
+    const plain = deco?.background ?? (hasArt || !borders ? DEFAULT_TILE_FILL : null);
     for (const k of tiling.copies) {
       const hue = HUES[k.cls % HUES.length]!;
       const isHome = k.iso.a === 1 && k.iso.d === 1 && k.iso.e === 0 && k.iso.f === 0;
@@ -67,7 +67,7 @@ export class TilingPreview {
         c.layer('lines').appendChild(svgEl('path', { d: pathOf(k.poly), fill: 'none', stroke: 'var(--bad)', 'stroke-width': c.px(1) }));
         continue;
       }
-      if (hasArt) c.layer('art').appendChild(svgEl('use', { href: '#env-decor', transform: toSvgTransform(k.iso) }));
+      layers.forEach((l, i) => c.layer('art').appendChild(useLayer('env-layer', i, l, toSvgTransform(k.iso))));
       if (!borders) continue;
       c.layer('lines').appendChild(
         svgEl('path', { d: pathOf(k.poly), fill: 'none', stroke: 'var(--ink)', 'stroke-width': c.px(1), 'stroke-linejoin': 'round' }),
